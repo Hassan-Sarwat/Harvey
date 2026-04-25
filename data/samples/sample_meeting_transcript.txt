@@ -1,5 +1,19 @@
-Meeting Transcript
+MEETING TRANSCRIPT - ATLASEDGE DPA NEGOTIATION
 
-Business: We need this DPA signed today to unblock launch.
-Supplier: We need broad subprocessor approval and cannot provide a final list yet.
-Legal: Missing subprocessors may be acceptable only if the agreement has notice and objection rights.
+Classification: Synthetic demo context for Harvey hackathon use only.
+
+Date: 23 April 2026. Attendees: BMW Procurement, BMW Privacy Legal, BMW Connected Vehicle Product, AtlasEdge Legal, AtlasEdge Security.
+
+BMW Product: We need the warranty triage pilot live by 1 June. The model needs diagnostic events, dealer code, and some driver behavior attributes.
+
+BMW Privacy Legal: Driver behavior and precise location push this above a routine processor agreement. The DPA must include a complete data schedule and a DPIA decision.
+
+AtlasEdge Security: Frankfurt hosts production data. The Virginia team only sees telemetry quality samples during incidents and model drift analysis.
+
+BMW Privacy Legal: Remote access is still a transfer issue. We need the personnel, systems, transfer tool, SCC module, transfer impact assessment, and encryption controls before approval.
+
+AtlasEdge Legal: We can make subprocessors visible on our trust portal. A 30-day objection right is difficult because urgent support vendors change quickly.
+
+BMW Procurement: Could we start with synthetic data and sign a side letter for production data later?
+
+BMW Privacy Legal: Synthetic or dummy data is fine. Real pilot data cannot start until the waiver is removed, breach notice is 24 hours, and data use for AI training is either removed or separately approved.

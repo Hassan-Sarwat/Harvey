@@ -1,4 +1,0 @@
-project_id = "gfotmpqsuzkdcsnlujsw"
-
-[functions.audit-dpa]
-verify_jwt = false

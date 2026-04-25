@@ -1,0 +1,5 @@
+sample_file,expected_finding_id,agent,severity,trigger_text,notes
+BMW_AtlasEdge_Datenschutz_DPA_Problem_Draft.docx,missing-subprocessor-list,playbook_checker,medium,personal data,Subprocessor list exists but the clause uses broad general authorization and short notice. Human reviewer should flag DP-002 even if keyword-only agent may not.
+BMW_AtlasEdge_Datenschutz_DPA_Problem_Draft.docx,illegal-data-subject-right-waiver,legal_checker,blocker,waive all data subject rights,This exact phrase is included to exercise the legal checker.
+BMW_RheinKlar_Litigation_Support_Problem_Draft.docx,unlimited-liability,playbook_checker,blocker,unlimited liability,This exact phrase is included to exercise LT-003.
+BMW_RheinKlar_Litigation_Support_Problem_Draft.docx,settlement-authority-delegated,human/legal_extension,high,"Service Provider may recommend and negotiate nuisance settlements below EUR 100,000",Structured as golden data for the next litigation-agent enhancement.

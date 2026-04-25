@@ -1,0 +1,447 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2326 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(BMW GROUP DPA NEGOTIATION PLAYBOOK - SOURCE BASED) Tj
+T*
+() Tj
+T*
+(Classification: Synthetic demo playbook for Harvey hackathon use only.) Tj
+T*
+() Tj
+T*
+(Base file: data/playbook/BMW Group DPA NEGOTIATION PLAYBOOK E.docx) Tj
+T*
+() Tj
+T*
+(Use this normalized matrix to review Data Processing Agreements where BMW Group acts as) Tj
+T*
+(controller and a third party acts as processor.) Tj
+T*
+() Tj
+T*
+(DPA-001 - Processing instructions and own-purpose use) Tj
+T*
+() Tj
+T*
+(Default: Processor may process Company Personal Data only on BMW Group's documented) Tj
+T*
+(instructions.) Tj
+T*
+() Tj
+T*
+(Preferred: Processor shall process Company Personal Data only on BMW Group's documented) Tj
+T*
+(instructions.) Tj
+T*
+() Tj
+T*
+(Fallback: Permit strictly aggregated service statistics only if BMW Group approves the) Tj
+T*
+(purpose in the order form.) Tj
+T*
+() Tj
+T*
+(Red line: Reject product improvement, analytics, benchmarking, marketing, AI training, or) Tj
+T*
+(other own-purpose processing unless specifically authorized.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor insists on using Company Personal Data for its own analytics, product) Tj
+T*
+(improvement, marketing, benchmarking, or model training.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall not process Company Personal Data for its own purposes,) Tj
+T*
+(including analytics, product improvement, benchmarking, marketing, or model training,) Tj
+T*
+(without BMW Group's prior written approval.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 28\(3\)\(a\); GDPR Art. 5\(1\)\(b\).) Tj
+T*
+() Tj
+T*
+(DPA-002 - Subprocessor approval and objection rights) Tj
+T*
+() Tj
+T*
+(Default: Processor may not appoint subprocessors without BMW Group consent or authorization) Tj
+T*
+(and change notice with an objection opportunity.) Tj
+T*
+() Tj
+T*
+(Preferred: Prior written consent for each subprocessor, with named subprocessor schedule and) Tj
+T*
+(processing location.) Tj
+T*
+() Tj
+T*
+(Fallback: General written authorization only if BMW Group receives advance notice of) Tj
+T*
+(intended changes and can object.) Tj
+T*
+() Tj
+T*
+(Red line: General authorization with no notice, no list, or no objection right.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor refuses to disclose subprocessors or asks for unrestricted additions) Tj
+T*
+(without informing BMW Group.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2408 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(Approved fix: Processor may use only authorized subprocessors and must notify BMW Group of) Tj
+T*
+(intended changes in time for BMW Group to object.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 28\(2\) and Art. 28\(4\).) Tj
+T*
+() Tj
+T*
+(DPA-003 - Data subject rights assistance) Tj
+T*
+() Tj
+T*
+(Default: Processor must promptly notify BMW Group of requests and assist BMW Group without) Tj
+T*
+(responding directly unless instructed or legally required.) Tj
+T*
+() Tj
+T*
+(Preferred: Processor notifies BMW Group immediately and provides technical and) Tj
+T*
+(organizational assistance for data subject rights.) Tj
+T*
+() Tj
+T*
+(Fallback: Processor may redirect a requester to BMW Group if it also preserves request) Tj
+T*
+(evidence and notifies BMW Group promptly.) Tj
+T*
+() Tj
+T*
+(Red line: Processor refuses assistance, charges excessive fees, responds directly without) Tj
+T*
+(instruction, or purports to waive data subject rights.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor refuses to assist with complex requests or requires uncapped fees for) Tj
+T*
+(request support.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall promptly notify BMW Group and provide reasonable assistance) Tj
+T*
+(with data subject requests without separate charge unless BMW Group approves an exceptional) Tj
+T*
+(fee.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 12-22; GDPR Art. 28\(3\)\(e\).) Tj
+T*
+() Tj
+T*
+(DPA-004 - Personal data breach notification) Tj
+T*
+() Tj
+T*
+(Default: Processor must notify BMW Group without undue delay upon becoming aware of a) Tj
+T*
+(personal data breach.) Tj
+T*
+() Tj
+T*
+(Preferred: Notice without undue delay after awareness, with enough information for BMW Group) Tj
+T*
+(to assess reporting duties and coordinate mitigation.) Tj
+T*
+() Tj
+T*
+(Fallback: A short outer deadline may be accepted for non-critical updates, but the initial) Tj
+T*
+(awareness notice must remain without undue delay.) Tj
+T*
+() Tj
+T*
+(Red line: Notice only after confirmation, after full investigation, or as soon as reasonably) Tj
+T*
+(practicable with no urgency standard.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor refuses to notify without undue delay or limits cooperation in breach) Tj
+T*
+(investigation.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall notify BMW Group without undue delay after becoming aware of) Tj
+T*
+(an actual or suspected Personal Data Breach and provide rolling updates.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2357 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(Legal basis: GDPR Art. 33; GDPR Art. 34; GDPR Art. 28\(3\)\(f\).) Tj
+T*
+() Tj
+T*
+(DPA-005 - Security measures) Tj
+T*
+() Tj
+T*
+(Default: Processor must implement appropriate technical and organizational measures under) Tj
+T*
+(GDPR Art. 32.) Tj
+T*
+() Tj
+T*
+(Preferred: Attach TOMs covering access control, encryption, logging, vulnerability) Tj
+T*
+(management, availability, confidentiality, and personnel controls.) Tj
+T*
+() Tj
+T*
+(Fallback: Accept current independent assurance evidence plus a BMW-specific TOM annex.) Tj
+T*
+() Tj
+T*
+(Red line: Best-efforts language with no concrete standards, no need-to-know access limit, or) Tj
+T*
+(no confidentiality obligation.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor refuses to commit to GDPR Art. 32 TOMs or restrict access to need-to-) Tj
+T*
+(know personnel.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall maintain the TOMs in Annex 2 and ensure access is limited to) Tj
+T*
+(need-to-know personnel bound by confidentiality obligations.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 32; GDPR Art. 28\(3\)\(c\).) Tj
+T*
+() Tj
+T*
+(DPA-006 - Deletion or return of data) Tj
+T*
+() Tj
+T*
+(Default: Processor must delete or return Company Personal Data within 10 business days after) Tj
+T*
+(cessation of services and certify deletion.) Tj
+T*
+() Tj
+T*
+(Preferred: Delete or return all Company Personal Data within 10 business days and provide) Tj
+T*
+(written certification.) Tj
+T*
+() Tj
+T*
+(Fallback: Permit backup deletion on the next scheduled purge cycle if backups remain) Tj
+T*
+(protected and inaccessible for ordinary use.) Tj
+T*
+() Tj
+T*
+(Red line: Long retention after termination, retention for analytics, or immediate) Tj
+T*
+(destruction of routine backups with no technical feasibility carve-out.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor requests retention beyond operational need or insists on immediate) Tj
+T*
+(backup destruction certification.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall delete or return Company Personal Data within 10 business) Tj
+T*
+(days, certify deletion, and keep any retained backups protected until normal purge.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 5\(1\)\(e\); GDPR Art. 28\(3\)\(g\).) Tj
+T*
+() Tj
+T*
+(DPA-007 - International data transfers) Tj
+T*
+() Tj
+T*
+(Default: No transfers outside the EU/EEA without prior BMW Group written consent and valid) Tj
+T*
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1732 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(transfer safeguards.) Tj
+T*
+() Tj
+T*
+(Preferred: No non-EEA transfers without prior written consent and an approved transfer) Tj
+T*
+(schedule.) Tj
+T*
+() Tj
+T*
+(Fallback: Allow transfers only under EU-approved SCCs, transfer assessment, and) Tj
+T*
+(supplementary measures.) Tj
+T*
+() Tj
+T*
+(Red line: Third-country transfers without BMW Group knowledge, SCC refusal, or safeguards to) Tj
+T*
+(be agreed later.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor refuses to sign EU SCCs for non-EEA transfers or asks for unrestricted) Tj
+T*
+(third-country access.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall not transfer Company Personal Data outside the EU/EEA unless) Tj
+T*
+(BMW Group gives prior written consent and approved safeguards are in place.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 44-46.) Tj
+T*
+() Tj
+T*
+(DPA-008 - Audit rights) Tj
+T*
+() Tj
+T*
+(Default: Processor must make compliance information available and allow BMW Group or its) Tj
+T*
+(mandated auditor to inspect/audit processor compliance.) Tj
+T*
+() Tj
+T*
+(Preferred: Information access plus audit/inspection rights by BMW Group or a mandated) Tj
+T*
+(auditor.) Tj
+T*
+() Tj
+T*
+(Fallback: Independent assurance reports and remote evidence review for low-risk processing.) Tj
+T*
+() Tj
+T*
+(Red line: Audits limited to once every several years, excessive audit fees, or no inspection) Tj
+T*
+(right.) Tj
+T*
+() Tj
+T*
+(Escalation: Processor charges excessive audit fees or refuses meaningful audit rights.) Tj
+T*
+() Tj
+T*
+(Approved fix: Processor shall make available all information necessary to demonstrate) Tj
+T*
+(compliance and allow audits by BMW Group or its mandated auditor.) Tj
+T*
+() Tj
+T*
+(Legal basis: GDPR Art. 28\(3\)\(h\).) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000204 00000 n 
+0000000330 00000 n 
+0000002708 00000 n 
+0000002834 00000 n 
+0000005294 00000 n 
+0000005420 00000 n 
+0000007829 00000 n 
+0000007957 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+9742
+%%EOF

@@ -22,9 +22,10 @@ class LegalCheckerAgent(Agent):
         findings: list[Finding] = []
         suggestions: list[Suggestion] = []
         lower_text = context.contract_text.lower()
-        if "waives all data subject rights" in lower_text:
+        rights_waiver_phrase = _data_subject_rights_waiver_phrase(lower_text)
+        if rights_waiver_phrase:
             ruling = _ruling_reference(evidence)
-            trigger = sentence_trigger_for_phrase(context.contract_text, "waives all data subject rights")
+            trigger = sentence_trigger_for_phrase(context.contract_text, rights_waiver_phrase)
             findings.append(
                 Finding(
                     id="illegal-data-subject-right-waiver",
@@ -83,3 +84,10 @@ def _evidence_source(item: dict[str, Any]) -> str:
     if source == "Legal Data Hub fallback":
         return "Otto Schmidt / Legal Data Hub fallback"
     return source
+
+
+def _data_subject_rights_waiver_phrase(text: str) -> str | None:
+    for phrase in ("waives all data subject rights", "waive all data subject rights"):
+        if phrase in text:
+            return phrase
+    return None

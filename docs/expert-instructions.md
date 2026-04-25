@@ -52,7 +52,7 @@ This file assigns work across the four-person team. Each contributor should keep
 - Golden expected findings for sample contracts.
 
 ### First Tasks
-1. Review `data/playbook/bmw_data_protection.json` and `data/playbook/bmw_litigation.json`.
+1. Review `data/playbook/bmw_data_protection.csv`, `data/playbook/bmw_litigation.csv`, and the matching `.docx`/`.xlsx` playbook exports.
 2. Add missing rules for mandatory clauses, risky ambiguity, illegal terms, default-value deviations, and escalation requirements.
 3. Create expected findings for `data/samples/sample_dpa.txt` and `data/samples/sample_litigation_contract.txt`.
 4. Provide approved replacement language for common fixes.
@@ -72,7 +72,7 @@ This file assigns work across the four-person team. Each contributor should keep
 - Legal review standards for escalated contract packages.
 
 ### First Tasks
-1. Review `data/legal_fallback/datenschutz_evidence.json` and `data/legal_fallback/litigation_evidence.json`.
+1. Review `data/legal_fallback/datenschutz_evidence.csv`, `data/legal_fallback/litigation_evidence.csv`, and the evidence digest workbook.
 2. Define which Legal Data Hub data assets should be queried for data protection and litigation questions.
 3. Expand `docs/legal-answer-standards.md` with answer quality rules and escalation language.
 4. Define legal validation checks for escalation packages, including required history, communications, AI suggestions, and user decisions.

@@ -7,7 +7,7 @@
 - Legal review standards for escalated contract packages.
 
 ## First Tasks
-1. Review `data/legal_fallback/datenschutz_evidence.json` and `data/legal_fallback/litigation_evidence.json`.
+1. Review `data/legal_fallback/datenschutz_evidence.csv`, `data/legal_fallback/litigation_evidence.csv`, and the evidence digest workbook.
 2. Define which Legal Data Hub data assets should be queried for data protection and litigation questions.
 3. Expand `docs/legal-answer-standards.md` with answer quality rules and escalation language.
 4. Define legal validation checks for escalation packages, including required history, communications, AI suggestions, and user decisions.

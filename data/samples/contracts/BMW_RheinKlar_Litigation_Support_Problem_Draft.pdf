@@ -1,0 +1,243 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 3259 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(GERMAN DISPUTE SUPPORT AND LITIGATION HOLD AGREEMENT) Tj
+T*
+() Tj
+T*
+(Classification: Synthetic demo contract for Harvey hackathon use only. Not legal advice.) Tj
+T*
+() Tj
+T*
+(This Agreement is entered into as of 20 May 2026 between BMW AG, Petuelring 130, 80788) Tj
+T*
+(Muenchen, Germany \(BMW\), and RheinKlar Forensics GmbH, Zollhafen 22, 50678 Koeln, Germany) Tj
+T*
+(\(Service Provider\).) Tj
+T*
+() Tj
+T*
+(Background. BMW is preparing a defense and counterclaim strategy in relation to a warranty) Tj
+T*
+(analytics dispute involving alleged battery degradation alerts, dealer campaign timing, and) Tj
+T*
+(a threatened group of German customer claims. Service Provider will collect, host, analyze,) Tj
+T*
+(and prepare technical evidence packages.) Tj
+T*
+() Tj
+T*
+(1. Services. Service Provider will perform forensic collection, chain-of-custody tracking,) Tj
+T*
+(custodian interviews, dashboard reconstruction, expert report drafting, and eDiscovery) Tj
+T*
+(export services for the matter internally identified as LIT-2026-014.) Tj
+T*
+() Tj
+T*
+(2. Matter Materials. Matter materials may include vehicle diagnostic logs, warranty claim) Tj
+T*
+(files, dealer communications, customer complaint summaries, employee mailbox exports,) Tj
+T*
+(meeting transcripts, JIRA tickets, model-quality metrics, and privileged legal work product) Tj
+T*
+(supplied by BMW Legal or external counsel.) Tj
+T*
+() Tj
+T*
+(3. Litigation Hold. BMW may issue a written legal hold identifying custodians, systems, date) Tj
+T*
+(ranges, and search terms. Service Provider will preserve materials after receiving a paid) Tj
+T*
+(preservation work order. Until that work order is approved, Service Provider may continue) Tj
+T*
+(routine deletion, log rotation, and storage tiering.) Tj
+T*
+() Tj
+T*
+(4. Settlement Authority. Service Provider may recommend and negotiate nuisance settlements) Tj
+T*
+(below EUR 100,000 per claimant where it believes settlement would reduce case-management) Tj
+T*
+(burden. BMW business stakeholders may approve those settlements by email if BMW Legal does) Tj
+T*
+(not object within three business days.) Tj
+T*
+() Tj
+T*
+(5. Admissions and Communications. Service Provider may communicate with regulators,) Tj
+T*
+(insurers, claimants, courts, and opposing experts where it considers such communication) Tj
+T*
+(useful to clarify technical facts. Service Provider may state that BMW's telemetry process) Tj
+T*
+(caused or contributed to an alleged defect if that statement is consistent with preliminary) Tj
+T*
+(analytics.) Tj
+T*
+() Tj
+T*
+(6. Privilege. The parties intend to preserve legal privilege and confidentiality. Service) Tj
+T*
+(Provider may nevertheless disclose investigation notes, expert drafts, and technical) Tj
+T*
+(assumptions to affiliates, subcontractors, insurers, and regulators where disclosure is) Tj
+T*
+(commercially reasonable or requested by law.) Tj
+T*
+() Tj
+T*
+(7. Data Hosting and Transfers. Matter materials will be stored in a review platform operated) Tj
+T*
+(from Dublin, Ireland, with disaster-recovery support in the United States. L3 support staff) Tj
+T*
+(in the United States may access exports for indexing and deduplication. Personal data will) Tj
+T*
+(be minimized where practical.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 3292 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(8. Chain of Custody. Service Provider will calculate SHA-256 hashes for collected exports) Tj
+T*
+(when the source system supports hashing. For email exports, dashboard screenshots, and) Tj
+T*
+(meeting transcripts, Service Provider may rely on ordinary business records and project) Tj
+T*
+(manager confirmation.) Tj
+T*
+() Tj
+T*
+(9. Liability. BMW accepts unlimited liability for all losses, third-party claims, regulator) Tj
+T*
+(fines, consequential damages, loss of profit, expert fees, and reputational harm arising out) Tj
+T*
+(of the services, matter materials, or instructions. Service Provider's liability is capped) Tj
+T*
+(at EUR 50,000 except for willful misconduct finally determined by a court.) Tj
+T*
+() Tj
+T*
+(10. Indemnity. BMW shall indemnify Service Provider and its affiliates against all claims) Tj
+T*
+(arising from BMW materials, instructions, privacy allegations, discovery disputes, sanctions) Tj
+T*
+(requests, and customer communications, including legal fees and settlement amounts.) Tj
+T*
+() Tj
+T*
+(11. Limitation Period. All claims against Service Provider expire six months after the) Tj
+T*
+(relevant event, including claims based on data protection incidents, confidentiality) Tj
+T*
+(breaches, gross negligence, or intentional conduct, unless mandatory law prohibits the) Tj
+T*
+(limitation.) Tj
+T*
+() Tj
+T*
+(12. Dispute Resolution. This Agreement is governed by the laws of Ireland. The courts of) Tj
+T*
+(Dublin have exclusive jurisdiction. Before seeking urgent relief, BMW must complete) Tj
+T*
+(executive negotiation and mediation in Dublin, even for confidentiality, data misuse, or) Tj
+T*
+(evidence-preservation disputes.) Tj
+T*
+() Tj
+T*
+(13. External Experts. Service Provider may retain affiliates, experts, subcontractors,) Tj
+T*
+(platform vendors, or counsel as it considers useful. Names may be provided after engagement) Tj
+T*
+(if BMW requests them and if confidentiality obligations permit disclosure.) Tj
+T*
+() Tj
+T*
+(14. Confidentiality. Each party will protect confidential information using reasonable care.) Tj
+T*
+(Service Provider may retain one archival copy of all matter materials, expert drafts, and) Tj
+T*
+(billing evidence for seven years for professional-risk management.) Tj
+T*
+() Tj
+T*
+(15. Deliverables. Deliverables include a claims chronology, custodian interview notes,) Tj
+T*
+(exported CSV issue lists, chart packs for expert review, model-quality appendix, and a) Tj
+T*
+(proposed settlement matrix.) Tj
+T*
+() Tj
+T*
+(Annex 1 - Synthetic Matter Summary. Claimants allege that an algorithmic battery degradation) Tj
+T*
+(flag was delayed in the dealer portal between October 2025 and February 2026. BMW's) Tj
+T*
+(preliminary position is that field conditions, charging profile, and dealer handling are) Tj
+T*
+(confounding factors.) Tj
+T*
+() Tj
+T*
+(Annex 2 - Custodians. Custodians include warranty analytics, connected vehicle operations,) Tj
+T*
+(dealer quality, campaign management, and supplier integration leads. Employee mailbox data) Tj
+T*
+(and Teams transcripts may be in scope after BMW Legal approval.) Tj
+T*
+() Tj
+T*
+(Annex 3 - Escalation Notes. BMW Litigation should focus on LT-002, LT-003, LT-004, LT-005,) Tj
+T*
+(LT-007, LT-008, LT-009, LT-010, LT-011, and LT-012 before signing.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000003628 00000 n 
+0000003754 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+7098
+%%EOF

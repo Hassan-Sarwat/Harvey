@@ -1,5 +1,43 @@
-Litigation Support Agreement
+GERMAN DISPUTE SUPPORT AND LITIGATION HOLD AGREEMENT
 
-Supplier will support BMW in discovery and litigation preparation. Supplier accepts
-unlimited liability for all losses arising from the services. Settlement authority
-is not described in this draft.
+Classification: Synthetic demo contract for Harvey hackathon use only. Not legal advice.
+
+This Agreement is entered into as of 20 May 2026 between BMW AG, Petuelring 130, 80788 Muenchen, Germany (BMW), and RheinKlar Forensics GmbH, Zollhafen 22, 50678 Koeln, Germany (Service Provider).
+
+Background. BMW is preparing a defense and counterclaim strategy in relation to a warranty analytics dispute involving alleged battery degradation alerts, dealer campaign timing, and a threatened group of German customer claims. Service Provider will collect, host, analyze, and prepare technical evidence packages.
+
+1. Services. Service Provider will perform forensic collection, chain-of-custody tracking, custodian interviews, dashboard reconstruction, expert report drafting, and eDiscovery export services for the matter internally identified as LIT-2026-014.
+
+2. Matter Materials. Matter materials may include vehicle diagnostic logs, warranty claim files, dealer communications, customer complaint summaries, employee mailbox exports, meeting transcripts, JIRA tickets, model-quality metrics, and privileged legal work product supplied by BMW Legal or external counsel.
+
+3. Litigation Hold. BMW may issue a written legal hold identifying custodians, systems, date ranges, and search terms. Service Provider will preserve materials after receiving a paid preservation work order. Until that work order is approved, Service Provider may continue routine deletion, log rotation, and storage tiering.
+
+4. Settlement Authority. Service Provider may recommend and negotiate nuisance settlements below EUR 100,000 per claimant where it believes settlement would reduce case-management burden. BMW business stakeholders may approve those settlements by email if BMW Legal does not object within three business days.
+
+5. Admissions and Communications. Service Provider may communicate with regulators, insurers, claimants, courts, and opposing experts where it considers such communication useful to clarify technical facts. Service Provider may state that BMW's telemetry process caused or contributed to an alleged defect if that statement is consistent with preliminary analytics.
+
+6. Privilege. The parties intend to preserve legal privilege and confidentiality. Service Provider may nevertheless disclose investigation notes, expert drafts, and technical assumptions to affiliates, subcontractors, insurers, and regulators where disclosure is commercially reasonable or requested by law.
+
+7. Data Hosting and Transfers. Matter materials will be stored in a review platform operated from Dublin, Ireland, with disaster-recovery support in the United States. L3 support staff in the United States may access exports for indexing and deduplication. Personal data will be minimized where practical.
+
+8. Chain of Custody. Service Provider will calculate SHA-256 hashes for collected exports when the source system supports hashing. For email exports, dashboard screenshots, and meeting transcripts, Service Provider may rely on ordinary business records and project manager confirmation.
+
+9. Liability. BMW accepts unlimited liability for all losses, third-party claims, regulator fines, consequential damages, loss of profit, expert fees, and reputational harm arising out of the services, matter materials, or instructions. Service Provider's liability is capped at EUR 50,000 except for willful misconduct finally determined by a court.
+
+10. Indemnity. BMW shall indemnify Service Provider and its affiliates against all claims arising from BMW materials, instructions, privacy allegations, discovery disputes, sanctions requests, and customer communications, including legal fees and settlement amounts.
+
+11. Limitation Period. All claims against Service Provider expire six months after the relevant event, including claims based on data protection incidents, confidentiality breaches, gross negligence, or intentional conduct, unless mandatory law prohibits the limitation.
+
+12. Dispute Resolution. This Agreement is governed by the laws of Ireland. The courts of Dublin have exclusive jurisdiction. Before seeking urgent relief, BMW must complete executive negotiation and mediation in Dublin, even for confidentiality, data misuse, or evidence-preservation disputes.
+
+13. External Experts. Service Provider may retain affiliates, experts, subcontractors, platform vendors, or counsel as it considers useful. Names may be provided after engagement if BMW requests them and if confidentiality obligations permit disclosure.
+
+14. Confidentiality. Each party will protect confidential information using reasonable care. Service Provider may retain one archival copy of all matter materials, expert drafts, and billing evidence for seven years for professional-risk management.
+
+15. Deliverables. Deliverables include a claims chronology, custodian interview notes, exported CSV issue lists, chart packs for expert review, model-quality appendix, and a proposed settlement matrix.
+
+Annex 1 - Synthetic Matter Summary. Claimants allege that an algorithmic battery degradation flag was delayed in the dealer portal between October 2025 and February 2026. BMW's preliminary position is that field conditions, charging profile, and dealer handling are confounding factors.
+
+Annex 2 - Custodians. Custodians include warranty analytics, connected vehicle operations, dealer quality, campaign management, and supplier integration leads. Employee mailbox data and Teams transcripts may be in scope after BMW Legal approval.
+
+Annex 3 - Escalation Notes. BMW Litigation should focus on LT-002, LT-003, LT-004, LT-005, LT-007, LT-008, LT-009, LT-010, LT-011, and LT-012 before signing.

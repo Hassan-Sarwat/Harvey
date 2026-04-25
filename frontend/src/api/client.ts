@@ -5,6 +5,14 @@ type RequestOptions = {
 
 export type Severity = "info" | "low" | "medium" | "high" | "blocker";
 
+export type ContractIdentity = {
+  contractType: string;
+  vendor: string;
+  effectiveStartDate: string;
+  effectiveEndDate: string;
+  playbookId?: string;
+};
+
 export type RulingReference = {
   source?: string;
   citation?: string;
@@ -16,6 +24,65 @@ export type Suggestion = {
   finding_id: string;
   proposed_text: string;
   rationale: string;
+};
+
+export type ReviewFinding = {
+  id: string;
+  title: string;
+  description: string;
+  severity: Severity;
+  clause_reference?: string | null;
+  trigger?: {
+    text: string;
+    start?: number | null;
+    end?: number | null;
+  } | null;
+  ruling?: RulingReference | null;
+  evidence?: RulingReference[];
+  requires_escalation: boolean;
+};
+
+export type ReviewResponse = {
+  contract_id?: string;
+  version_id?: string;
+  version_number?: number;
+  is_new_contract?: boolean;
+  agent_name: string;
+  summary: string;
+  findings: ReviewFinding[];
+  suggestions: Suggestion[];
+  confidence: number;
+  requires_escalation: boolean;
+  metadata: Record<string, unknown>;
+};
+
+export type ReviewViolation = {
+  severity: "High" | "Medium";
+  clause: string;
+  issue: string;
+  reference: string;
+  source?: string;
+  suggestion: string;
+  rationale?: string;
+};
+
+export type ReviewAuditResult = {
+  contract_summary: string;
+  status: "Approved" | "Escalated" | "Rejected";
+  escalation_required: boolean;
+  violations: ReviewViolation[];
+  confidence: number;
+  contract_id?: string;
+  version_number?: number;
+  escalation_id?: string;
+};
+
+export type LegalQAResponse = {
+  summary: string;
+  recommendation: string;
+  company_basis: RulingReference[];
+  legal_basis: RulingReference[];
+  escalate: boolean;
 };
 
 export type TriggerAnnotation = {
@@ -36,19 +103,21 @@ export type TriggerAnnotation = {
 export type AgentOutput = {
   agent_name: string;
   summary: string;
-  findings: Array<Record<string, unknown>>;
+  findings: ReviewFinding[];
   suggestions: Suggestion[];
   confidence: number;
   requires_escalation: boolean;
   metadata: Record<string, unknown>;
 };
 
+export type EscalationStatus = "pending_legal" | "accepted" | "denied";
+
 export type EscalationListItem = {
   id: string;
   contract_id: string;
   version_id?: string | null;
   version_number?: number | null;
-  status: "pending_legal" | "accepted" | "denied";
+  status: EscalationStatus;
   reason: string;
   source_agents: string[];
   source_finding_ids: string[];
@@ -65,7 +134,7 @@ export type EscalationListItem = {
 };
 
 export type EscalationDetail = EscalationListItem & {
-  review_result: Record<string, unknown>;
+  review_result: ReviewResponse;
   contract_text: string;
   trigger_annotations: TriggerAnnotation[];
   agent_outputs: AgentOutput[];
@@ -78,36 +147,82 @@ export type EscalationChatResponse = {
   cited_context: Array<Record<string, unknown>>;
 };
 
+export type DashboardMetrics = {
+  ai_approved?: number;
+  escalated?: number;
+  average_contract_value_vs_default?: Array<Record<string, unknown>>;
+  frequent_playbook_deviations?: string[];
+  escalation_metrics?: {
+    total_escalations: number;
+    pending_escalations: number;
+    accepted_escalations: number;
+    denied_escalations: number;
+    false_escalations: number;
+    positive_escalations: number;
+    top_false_escalation_agent: Record<string, unknown> | null;
+    top_positive_escalation_agent: Record<string, unknown> | null;
+    per_agent: Array<Record<string, unknown>>;
+  };
+};
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(path, {
+  const isFormData = options.body instanceof FormData;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? "GET",
-    headers: { "Content-Type": "application/json" },
-    body: options.body ? JSON.stringify(options.body) : undefined
+    headers: isFormData ? undefined : { "Content-Type": "application/json" },
+    body: isFormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    const detail = await response.text();
+    throw new Error(readErrorMessage(response.status, detail));
   }
 
   return response.json() as Promise<T>;
 }
 
-export function reviewContract(contractText: string, contractType: string) {
-  return request<Record<string, unknown>>("/contracts/demo-contract-1/review", {
+export function reviewContractText(contractText: string, identity: ContractIdentity) {
+  return request<ReviewResponse>("/contracts/review", {
     method: "POST",
-    body: { contract_text: contractText, contract_type: contractType }
+    body: {
+      contract_text: contractText,
+      contract_type: identity.contractType,
+      vendor: identity.vendor,
+      effective_start_date: identity.effectiveStartDate,
+      effective_end_date: identity.effectiveEndDate,
+    },
   });
 }
 
-export function askLegalQuestion(question: string, useCase: string, contractType: string) {
-  return request<Record<string, unknown>>("/legal-qa", {
+export function reviewContractFile(file: File, identity: ContractIdentity) {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("contract_type", identity.contractType);
+  body.append("vendor", identity.vendor);
+  body.append("effective_start_date", identity.effectiveStartDate);
+  body.append("effective_end_date", identity.effectiveEndDate);
+  if (identity.playbookId) {
+    body.append("playbook_id", identity.playbookId);
+  }
+
+  return request<ReviewResponse>("/contracts/review/upload", {
     method: "POST",
-    body: { question, use_case: useCase, contract_type: contractType }
+    body,
   });
 }
 
-export function listEscalations() {
-  return request<{ items: EscalationListItem[] }>("/escalations");
+export function askLegalQuestion(question: string, useCase = "contract_review", contractType = "data_protection") {
+  return request<LegalQAResponse>("/legal-qa", {
+    method: "POST",
+    body: { question, use_case: useCase, contract_type: contractType },
+  });
+}
+
+export function listEscalations(status?: EscalationStatus) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<{ items: EscalationListItem[] }>(`/escalations${query}`);
 }
 
 export function getEscalation(escalationId: string) {
@@ -117,10 +232,114 @@ export function getEscalation(escalationId: string) {
 export function askEscalationQuestion(escalationId: string, question: string) {
   return request<EscalationChatResponse>(`/escalations/${escalationId}/chat`, {
     method: "POST",
-    body: { question }
+    body: { question },
+  });
+}
+
+export function decideEscalation(
+  escalationId: string,
+  payload: {
+    decision: "accepted" | "denied";
+    notes?: string;
+    fix_suggestions?: string[];
+    decided_by?: string;
+  },
+) {
+  return request<EscalationDetail>(`/escalations/${escalationId}/decision`, {
+    method: "POST",
+    body: payload,
   });
 }
 
 export function getDashboardMetrics() {
-  return request<Record<string, unknown>>("/dashboard/metrics");
+  return request<DashboardMetrics>("/dashboard/metrics");
+}
+
+export function toAuditResult(review: ReviewResponse): ReviewAuditResult {
+  const suggestionsByFinding = new Map(review.suggestions.map((suggestion) => [suggestion.finding_id, suggestion]));
+  const highestSeverity = review.findings.reduce((highest, finding) => Math.max(highest, severityWeight(finding.severity)), 0);
+  const escalationId = typeof review.metadata?.escalation_id === "string" ? review.metadata.escalation_id : undefined;
+  const violations = review.findings.map((finding) => {
+    const suggestion = suggestionsByFinding.get(finding.id);
+    return {
+      severity: severityWeight(finding.severity) >= severityWeight("high") ? "High" : "Medium",
+      clause: finding.trigger?.text || finding.clause_reference || "No exact clause text was recorded.",
+      issue: `${finding.title}\n\n${finding.description}`,
+      reference: finding.ruling?.citation || finding.id,
+      source: finding.ruling?.source,
+      suggestion: suggestion?.proposed_text || "Route this issue to the responsible legal reviewer before approval.",
+      rationale: suggestion?.rationale,
+    } satisfies ReviewViolation;
+  });
+
+  return {
+    contract_summary: `${review.summary} ${review.contract_id ? `Contract ${review.contract_id}` : ""}`.trim(),
+    status: review.requires_escalation ? "Escalated" : highestSeverity >= severityWeight("high") ? "Rejected" : "Approved",
+    escalation_required: review.requires_escalation,
+    violations,
+    confidence: review.confidence,
+    contract_id: review.contract_id,
+    version_number: review.version_number,
+    escalation_id: escalationId,
+  };
+}
+
+export function formatLegalAnswer(response: LegalQAResponse) {
+  const lines = [
+    `### Summary\n${response.summary}`,
+    `### Recommendation\n${response.recommendation}`,
+  ];
+
+  if (response.company_basis.length) {
+    lines.push(`### BMW Basis\n${formatBasis(response.company_basis)}`);
+  }
+  if (response.legal_basis.length) {
+    lines.push(`### Legal Evidence\n${formatBasis(response.legal_basis)}`);
+  }
+  if (response.escalate) {
+    lines.push("### Escalation\nThis question should be escalated to legal counsel before the business team proceeds.");
+  }
+
+  return lines.join("\n\n");
+}
+
+function formatBasis(items: RulingReference[]) {
+  return items
+    .map((item) => {
+      const heading = [item.source, item.citation].filter(Boolean).join(" - ");
+      const quote = item.quote ? `\n> ${item.quote}` : "";
+      return `- **${heading || "Evidence"}**${quote}`;
+    })
+    .join("\n");
+}
+
+function severityWeight(severity: Severity) {
+  const weights: Record<Severity, number> = {
+    info: 0,
+    low: 1,
+    medium: 2,
+    high: 3,
+    blocker: 4,
+  };
+  return weights[severity];
+}
+
+function readErrorMessage(status: number, body: string) {
+  if (!body) {
+    return `Request failed with status ${status}`;
+  }
+
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed.detail === "string") {
+      return parsed.detail;
+    }
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join("; ");
+    }
+  } catch {
+    return `Request failed with status ${status}`;
+  }
+
+  return `Request failed with status ${status}`;
 }

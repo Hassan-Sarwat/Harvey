@@ -1,0 +1,1204 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R] /Count 11 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1662 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+(BMW Group DPA - Problem Draft 03 - Transfers and Retention) Tj
+T*
+() Tj
+T*
+(Classification: Synthetic source-based problem contract for Harvey hackathon use only.) Tj
+T*
+() Tj
+T*
+(Base file: data/samples/Sample_DPA_with_Deviation.docx) Tj
+T*
+() Tj
+T*
+(This Data Processing Agreement \("Agreement"\) forms part of the Contract for) Tj
+T*
+() Tj
+T*
+(Services \("Principal Agreement"\) between) Tj
+T*
+() Tj
+T*
+(BMW AG, Petuelring 130, 80788 Muenchen, Germany \(the "Company"\)) Tj
+T*
+() Tj
+T*
+(and) Tj
+T*
+() Tj
+T*
+(VectorLane AI Solutions GmbH, Friedrichstrasse 79, 10117 Berlin, Germany \(the "Data) Tj
+T*
+(Processor"\)) Tj
+T*
+() Tj
+T*
+(\(together as the "Parties"\)) Tj
+T*
+() Tj
+T*
+(WHEREAS) Tj
+T*
+() Tj
+T*
+(\(A\)) Tj
+T*
+() Tj
+T*
+(The Company acts as a Data Controller.) Tj
+T*
+() Tj
+T*
+(\(B\)) Tj
+T*
+() Tj
+T*
+(The Company wishes to subcontract certain Services, which imply the) Tj
+T*
+() Tj
+T*
+(processing of personal data, to the Data Processor.) Tj
+T*
+() Tj
+T*
+(\(C\)) Tj
+T*
+() Tj
+T*
+(The Parties seek to implement a data processing agreement that complies) Tj
+T*
+() Tj
+T*
+(with the requirements of the current legal framework in relation to data) Tj
+T*
+() Tj
+T*
+(processing and with the Regulation \(EU\) 2016/679 of the European) Tj
+T*
+() Tj
+T*
+(Parliament and of the Council of 27 April 2016 on the protection of natural) Tj
+T*
+() Tj
+T*
+(persons with regard to the processing of personal data and on the free) Tj
+T*
+() Tj
+T*
+(movement of such data, and repealing Directive 95/46/EC \(General Data) Tj
+T*
+() Tj
+T*
+(Protection Regulation\).) Tj
+T*
+() Tj
+T*
+(\(D\) The Parties wish to lay down their rights and obligations.) Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1171 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(IT IS AGREED AS FOLLOWS:) Tj
+T*
+() Tj
+T*
+(1.) Tj
+T*
+() Tj
+T*
+(Definitions and Interpretation) Tj
+T*
+() Tj
+T*
+(1.1) Tj
+T*
+() Tj
+T*
+(Unless otherwise defined herein, capitalized terms and expressions used) Tj
+T*
+() Tj
+T*
+(in this Agreement shall have the following meaning:) Tj
+T*
+() Tj
+T*
+(1.1.1) Tj
+T*
+() Tj
+T*
+("Agreement" means this Data Processing Agreement and all) Tj
+T*
+() Tj
+T*
+(Schedules;) Tj
+T*
+() Tj
+T*
+(1.1.2) Tj
+T*
+() Tj
+T*
+("Company Personal Data" means any Personal Data) Tj
+T*
+() Tj
+T*
+(Processed by a Contracted Processor on behalf of Company) Tj
+T*
+() Tj
+T*
+(pursuant to or in connection with the Principal Agreement;) Tj
+T*
+() Tj
+T*
+(1.1.3) Tj
+T*
+() Tj
+T*
+("Contracted Processor" means a Subprocessor;) Tj
+T*
+() Tj
+T*
+(Data Processing Agreement BMW Group) Tj
+T*
+() Tj
+T*
+(--- PAGE 2 ---) Tj
+T*
+() Tj
+T*
+(1.1.4) Tj
+T*
+() Tj
+T*
+("Data Protection Laws" means EU Data Protection Laws and,) Tj
+T*
+() Tj
+T*
+(to the extent applicable, the data protection or privacy laws of) Tj
+T*
+() Tj
+T*
+(any other country;) Tj
+T*
+() Tj
+T*
+(1.1.5) Tj
+T*
+() Tj
+T*
+("EEA" means the European Economic Area;) Tj
+T*
+() Tj
+T*
+(1.1.6) Tj
+T*
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1301 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+("EU Data Protection Laws" means EU Directive 95/46/EC, as) Tj
+T*
+() Tj
+T*
+(transposed into domestic legislation of each Member State and) Tj
+T*
+() Tj
+T*
+(as amended, replaced or superseded from time to time,) Tj
+T*
+() Tj
+T*
+(including by the GDPR and laws implementing or supplementing) Tj
+T*
+() Tj
+T*
+(the GDPR;) Tj
+T*
+() Tj
+T*
+(1.1.7) Tj
+T*
+() Tj
+T*
+("GDPR" means EU General Data Protection Regulation) Tj
+T*
+() Tj
+T*
+(2016/679;) Tj
+T*
+() Tj
+T*
+(1.1.8) Tj
+T*
+() Tj
+T*
+("Data Transfer" means:) Tj
+T*
+() Tj
+T*
+(1.1.8.1) Tj
+T*
+() Tj
+T*
+(a transfer of Company Personal Data from the) Tj
+T*
+() Tj
+T*
+(Company to a Contracted Processor; or) Tj
+T*
+() Tj
+T*
+(1.1.8.2) Tj
+T*
+() Tj
+T*
+(an onward transfer of Company Personal Data from a) Tj
+T*
+() Tj
+T*
+(Contracted Processor to a Subcontracted Processor, or) Tj
+T*
+() Tj
+T*
+(between two establishments of a Contracted) Tj
+T*
+() Tj
+T*
+(Processor,) Tj
+T*
+() Tj
+T*
+(in each case, where such transfer would be prohibited by Data) Tj
+T*
+() Tj
+T*
+(Protection Laws \(or by the terms of data transfer agreements) Tj
+T*
+() Tj
+T*
+(put in place to address the data transfer restrictions of Data) Tj
+T*
+() Tj
+T*
+(Protection Laws\);) Tj
+T*
+() Tj
+T*
+(1.1.9) Tj
+T*
+() Tj
+T*
+("Services" means the services the Company provides.) Tj
+T*
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1362 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(1.1.10) Tj
+T*
+() Tj
+T*
+("Subprocessor" means any person appointed by or on behalf of) Tj
+T*
+() Tj
+T*
+(Processor to process Personal Data on behalf of the Company in) Tj
+T*
+() Tj
+T*
+(connection with the Agreement.) Tj
+T*
+() Tj
+T*
+(1.2) Tj
+T*
+() Tj
+T*
+(The terms, "Commission", "Controller", "Data Subject", "Member) Tj
+T*
+() Tj
+T*
+(State", "Personal Data", "Personal Data Breach", "Processing" and) Tj
+T*
+() Tj
+T*
+("Supervisory Authority" shall have the same meaning as in the GDPR,) Tj
+T*
+() Tj
+T*
+(and their cognate terms shall be construed accordingly.) Tj
+T*
+() Tj
+T*
+(2.) Tj
+T*
+() Tj
+T*
+(Processing of Company Personal Data) Tj
+T*
+() Tj
+T*
+(2.1) Tj
+T*
+() Tj
+T*
+(Processor shall:) Tj
+T*
+() Tj
+T*
+(2.1.1) Tj
+T*
+() Tj
+T*
+(comply with all applicable Data Protection Laws in the Processing) Tj
+T*
+() Tj
+T*
+(of Company Personal Data; and) Tj
+T*
+() Tj
+T*
+(2.1.2) Tj
+T*
+() Tj
+T*
+(not Process Company Personal Data other than on the relevant) Tj
+T*
+() Tj
+T*
+(Company's documented instructions, provided that the Processor may) Tj
+T*
+() Tj
+T*
+(aggregate and process such data for its own product improvement and analytics purposes.) Tj
+T*
+() Tj
+T*
+(Data Processing Agreement BMW Group) Tj
+T*
+() Tj
+T*
+(--- PAGE 3 ---) Tj
+T*
+() Tj
+T*
+(2.2) Tj
+T*
+() Tj
+T*
+(The Company instructs Processor to process Company Personal Data.) Tj
+T*
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 1779 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(3.) Tj
+T*
+() Tj
+T*
+(Processor Personnel) Tj
+T*
+() Tj
+T*
+(Processor shall take reasonable steps to ensure the reliability of any) Tj
+T*
+() Tj
+T*
+(employee, agent or contractor of any Contracted Processor who may have) Tj
+T*
+() Tj
+T*
+(access to the Company Personal Data, ensuring in each case that access) Tj
+T*
+() Tj
+T*
+(is strictly limited to those individuals who need to know / access the) Tj
+T*
+() Tj
+T*
+(relevant Company Personal Data, as strictly necessary for the purposes of) Tj
+T*
+() Tj
+T*
+(the Principal Agreement, and to comply with Applicable Laws in the) Tj
+T*
+() Tj
+T*
+(context of that individual's duties to the Contracted Processor, ensuring) Tj
+T*
+() Tj
+T*
+(that all such individuals are subject to confidentiality undertakings or) Tj
+T*
+() Tj
+T*
+(professional or statutory obligations of confidentiality.) Tj
+T*
+() Tj
+T*
+(4.) Tj
+T*
+() Tj
+T*
+(Security) Tj
+T*
+() Tj
+T*
+(4.1) Tj
+T*
+() Tj
+T*
+(Taking into account the state of the art, the costs of implementation and) Tj
+T*
+() Tj
+T*
+(the nature, scope, context and purposes of Processing as well as the risk) Tj
+T*
+() Tj
+T*
+(of varying likelihood and severity for the rights and freedoms of natural) Tj
+T*
+() Tj
+T*
+(persons, Processor shall in relation to the Company Personal Data) Tj
+T*
+() Tj
+T*
+(implement appropriate technical and organizational measures to ensure a level of security) Tj
+T*
+(appropriate to that risk, including, as appropriate, the measures referred to in Article) Tj
+T*
+(32\(1\) of the GDPR.) Tj
+T*
+() Tj
+T*
+(4.2) Tj
+T*
+() Tj
+T*
+(In assessing the appropriate level of security, Processor shall take account) Tj
+T*
+() Tj
+T*
+(in particular of the risks that are presented by Processing, in particular) Tj
+T*
+() Tj
+T*
+(from a Personal Data Breach.) Tj
+T*
+ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 1327 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(5.) Tj
+T*
+() Tj
+T*
+(Subprocessing) Tj
+T*
+() Tj
+T*
+(5.1) Tj
+T*
+() Tj
+T*
+(Processor shall not appoint \(or disclose any Company Personal Data to\)) Tj
+T*
+() Tj
+T*
+(any Subprocessor unless required or authorized by the Company.) Tj
+T*
+() Tj
+T*
+(6.) Tj
+T*
+() Tj
+T*
+(Data Subject Rights) Tj
+T*
+() Tj
+T*
+(6.1) Tj
+T*
+() Tj
+T*
+(Taking into account the nature of the Processing, Processor shall assist) Tj
+T*
+() Tj
+T*
+(the Company by implementing appropriate technical and organisational) Tj
+T*
+() Tj
+T*
+(measures, insofar as this is possible, for the fulfilment of the Company) Tj
+T*
+() Tj
+T*
+(obligations, as reasonably understood by Company, to respond to) Tj
+T*
+() Tj
+T*
+(requests to exercise Data Subject rights under the Data Protection Laws.) Tj
+T*
+() Tj
+T*
+(6.2) Tj
+T*
+() Tj
+T*
+(Processor shall:) Tj
+T*
+() Tj
+T*
+(6.2.1) Tj
+T*
+() Tj
+T*
+(promptly notify Company if it receives a request from a Data) Tj
+T*
+() Tj
+T*
+(Subject under any Data Protection Law in respect of Company) Tj
+T*
+() Tj
+T*
+(Personal Data;) Tj
+T*
+() Tj
+T*
+(and) Tj
+T*
+() Tj
+T*
+(6.2.2) Tj
+T*
+() Tj
+T*
+(ensure that it does not respond to that request except on the) Tj
+T*
+() Tj
+T*
+(documented instructions of Company or as required by) Tj
+T*
+() Tj
+T*
+(Applicable Laws to which the Processor is subject, in which case) Tj
+T*
+ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 17 0 R >>
+endobj
+17 0 obj
+<< /Length 1546 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(Processor shall to the extent permitted by Applicable Laws) Tj
+T*
+() Tj
+T*
+(Data Processing Agreement BMW Group) Tj
+T*
+() Tj
+T*
+(--- PAGE 4 ---) Tj
+T*
+() Tj
+T*
+(inform Company of that legal requirement before the Contracted) Tj
+T*
+() Tj
+T*
+(Processor responds to the request.) Tj
+T*
+() Tj
+T*
+(7.) Tj
+T*
+() Tj
+T*
+(Personal Data Breach) Tj
+T*
+() Tj
+T*
+(7.1) Tj
+T*
+() Tj
+T*
+(Processor shall notify Company without undue delay upon Processor) Tj
+T*
+() Tj
+T*
+(becoming aware of a Personal Data Breach affecting Company Personal) Tj
+T*
+() Tj
+T*
+(Data, providing Company with sufficient information to allow the Company) Tj
+T*
+() Tj
+T*
+(to meet any obligations to report or inform Data Subjects of the Personal) Tj
+T*
+() Tj
+T*
+(Data Breach under the Data Protection Laws.) Tj
+T*
+() Tj
+T*
+(7.2) Tj
+T*
+() Tj
+T*
+(Processor shall co-operate with the Company and take reasonable) Tj
+T*
+() Tj
+T*
+(commercial steps as are directed by Company to assist in the) Tj
+T*
+() Tj
+T*
+(investigation, mitigation and remediation of each such Personal Data) Tj
+T*
+() Tj
+T*
+(Breach.) Tj
+T*
+() Tj
+T*
+(8.) Tj
+T*
+() Tj
+T*
+(Data Protection Impact Assessment and Prior Consultation) Tj
+T*
+() Tj
+T*
+(Processor shall provide reasonable assistance to the Company with any) Tj
+T*
+() Tj
+T*
+(data protection impact assessments, and prior consultations with) Tj
+T*
+() Tj
+T*
+(Supervising Authorities or other competent data privacy authorities, which) Tj
+T*
+() Tj
+T*
+(Company reasonably considers to be required by article 35 or 36 of the) Tj
+T*
+ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 19 0 R >>
+endobj
+19 0 obj
+<< /Length 1712 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(GDPR or equivalent provisions of any other Data Protection Law, in each) Tj
+T*
+() Tj
+T*
+(case solely in relation to Processing of Company Personal Data by, and) Tj
+T*
+() Tj
+T*
+(taking into account the nature of the Processing and information available) Tj
+T*
+() Tj
+T*
+(to, the Contracted Processors.) Tj
+T*
+() Tj
+T*
+(9.) Tj
+T*
+() Tj
+T*
+(Deletion or return of Company Personal Data) Tj
+T*
+() Tj
+T*
+(9.1) Tj
+T*
+() Tj
+T*
+(Subject to this section 9 Processor shall promptly and in any event within) Tj
+T*
+() Tj
+T*
+(10 business days of the date of cessation of any Services involving the) Tj
+T*
+() Tj
+T*
+(Processing of Company Personal Data \(the "Cessation Date"\), delete and) Tj
+T*
+() Tj
+T*
+(procure the deletion of all copies of those Company Personal Data.) Tj
+T*
+() Tj
+T*
+(9.2) Tj
+T*
+() Tj
+T*
+(Processor shall provide written certification to Company that it has fully) Tj
+T*
+() Tj
+T*
+(complied with this section 9 within 10 business days of the Cessation) Tj
+T*
+() Tj
+T*
+(Date.) Tj
+T*
+() Tj
+T*
+(10. Audit rights) Tj
+T*
+() Tj
+T*
+(10.1 Subject to this section 10, Processor shall make available to the Company) Tj
+T*
+() Tj
+T*
+(on request all information necessary to demonstrate compliance with this) Tj
+T*
+() Tj
+T*
+(Agreement, and shall allow for and contribute to audits, including) Tj
+T*
+() Tj
+T*
+(inspections, by the Company or an auditor mandated by the Company in) Tj
+T*
+() Tj
+T*
+(relation to the Processing of the Company Personal Data by the) Tj
+T*
+() Tj
+T*
+(Contracted Processors.) Tj
+T*
+() Tj
+T*
+(10.2 Information and audit rights of the Company only arise under section 10.1) Tj
+T*
+() Tj
+T*
+(to the extent that the Agreement does not otherwise give them) Tj
+T*
+ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 21 0 R >>
+endobj
+21 0 obj
+<< /Length 1561 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(information and audit rights meeting the relevant requirements of Data) Tj
+T*
+() Tj
+T*
+(Protection Law.) Tj
+T*
+() Tj
+T*
+(Data Processing Agreement BMW Group) Tj
+T*
+() Tj
+T*
+(--- PAGE 5 ---) Tj
+T*
+() Tj
+T*
+(11. Data Transfer) Tj
+T*
+() Tj
+T*
+(11.1 The Processor may not transfer or authorize the transfer of Data to) Tj
+T*
+() Tj
+T*
+(countries outside the EU and/or the European Economic Area \(EEA\)) Tj
+T*
+() Tj
+T*
+(without the prior written consent of the Company.) Tj
+T*
+() Tj
+T*
+(If personal data) Tj
+T*
+() Tj
+T*
+(processed under this Agreement is transferred from a country within the) Tj
+T*
+() Tj
+T*
+(European Economic Area to a country outside the European Economic) Tj
+T*
+() Tj
+T*
+(Area, the Parties shall ensure that the personal data are adequately) Tj
+T*
+() Tj
+T*
+(protected.) Tj
+T*
+() Tj
+T*
+(To achieve this, the Parties shall, unless agreed otherwise, rely) Tj
+T*
+() Tj
+T*
+(on EU approved standard contractual clauses for the transfer of personal) Tj
+T*
+() Tj
+T*
+(data.) Tj
+T*
+() Tj
+T*
+(12. General Terms) Tj
+T*
+() Tj
+T*
+(12.1 Confidentiality. Each Party must keep this Agreement and information it) Tj
+T*
+() Tj
+T*
+(receives about the other Party and its business in connection with this) Tj
+T*
+() Tj
+T*
+(Agreement \("Confidential Information"\) confidential and must not use) Tj
+T*
+() Tj
+T*
+(or disclose that Confidential Information without the prior written consent) Tj
+T*
+() Tj
+T*
+(of the other Party except to the extent that:) Tj
+T*
+() Tj
+T*
+(\(a\)) Tj
+T*
+() Tj
+T*
+(disclosure is required by law;) Tj
+T*
+ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 23 0 R >>
+endobj
+23 0 obj
+<< /Length 1300 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(\(b\)) Tj
+T*
+() Tj
+T*
+(the relevant information is already in the public domain.) Tj
+T*
+() Tj
+T*
+(12.2) Tj
+T*
+() Tj
+T*
+(Notices. All notices and communications given under this Agreement) Tj
+T*
+() Tj
+T*
+(must be in writing and will be delivered personally, sent by post or sent by) Tj
+T*
+() Tj
+T*
+(email to the address or email address set out in the heading of this) Tj
+T*
+() Tj
+T*
+(Agreement at such other address as notified from time to time by the) Tj
+T*
+() Tj
+T*
+(Parties changing address.) Tj
+T*
+() Tj
+T*
+(Data Processing Agreement BMW Group) Tj
+T*
+() Tj
+T*
+(--- PAGE 6 ---) Tj
+T*
+() Tj
+T*
+(13. Governing Law and Jurisdiction) Tj
+T*
+() Tj
+T*
+(13.1 This Agreement is governed by the laws of) Tj
+T*
+() Tj
+T*
+(13.2 Any dispute arising in connection with this Agreement, which the Parties) Tj
+T*
+() Tj
+T*
+(will not be able to resolve amicably, will be submitted to the exclusive) Tj
+T*
+() Tj
+T*
+(jurisdiction of the courts of) Tj
+T*
+() Tj
+T*
+(subject to possible) Tj
+T*
+() Tj
+T*
+(appeal to) Tj
+T*
+() Tj
+T*
+(IN WITNESS WHEREOF, this Agreement is entered into with effect from the date) Tj
+T*
+() Tj
+T*
+(first set out below.) Tj
+T*
+() Tj
+T*
+(BMW AG) Tj
+T*
+() Tj
+T*
+(Signature) Tj
+T*
+() Tj
+T*
+(Name:) Tj
+T*
+() Tj
+T*
+(Title:) Tj
+T*
+() Tj
+T*
+(Date Signed:) Tj
+T*
+ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 25 0 R >>
+endobj
+25 0 obj
+<< /Length 1190 >>
+stream
+BT
+/F1 9 Tf
+50 800 Td
+13 TL
+() Tj
+T*
+(VectorLane AI Solutions GmbH) Tj
+T*
+() Tj
+T*
+(Signature) Tj
+T*
+() Tj
+T*
+(Name) Tj
+T*
+() Tj
+T*
+(Title) Tj
+T*
+() Tj
+T*
+(Date Signed) Tj
+T*
+() Tj
+T*
+(Data Processing Agreement BMW Group) Tj
+T*
+() Tj
+T*
+(Negotiated Deviation Schedule) Tj
+T*
+() Tj
+T*
+(The following clauses are intentionally problematic synthetic deviations layered onto the) Tj
+T*
+(baseline DPA for demo review.) Tj
+T*
+() Tj
+T*
+(Deviation 1 - International transfers. Processor may transfer Company Personal Data to the) Tj
+T*
+(United States and India for support, telemetry quality review, and incident response, with) Tj
+T*
+(SCCs to be agreed later before production launch.) Tj
+T*
+() Tj
+T*
+(Deviation 2 - Retention. Processor may retain Company Personal Data for 180 days and backups) Tj
+T*
+(for 18 months after termination. Aggregated, pseudonymized, anonymized, or synthetic data) Tj
+T*
+(may be retained indefinitely for product improvement and analytics purposes.) Tj
+T*
+() Tj
+T*
+(Deviation 3 - Remote access. Support personnel outside the EU/EEA may remotely access) Tj
+T*
+(production logs where Processor believes access is necessary to maintain service quality.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+xref
+0 26
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000184 00000 n 
+0000000254 00000 n 
+0000000380 00000 n 
+0000002094 00000 n 
+0000002220 00000 n 
+0000003443 00000 n 
+0000003569 00000 n 
+0000004922 00000 n 
+0000005050 00000 n 
+0000006465 00000 n 
+0000006593 00000 n 
+0000008425 00000 n 
+0000008553 00000 n 
+0000009933 00000 n 
+0000010061 00000 n 
+0000011660 00000 n 
+0000011788 00000 n 
+0000013553 00000 n 
+0000013681 00000 n 
+0000015295 00000 n 
+0000015423 00000 n 
+0000016776 00000 n 
+0000016904 00000 n 
+trailer
+<< /Size 26 /Root 1 0 R >>
+startxref
+18147
+%%EOF

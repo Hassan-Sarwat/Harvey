@@ -1,5 +1,47 @@
-Data Processing Agreement
+DATA PROCESSING AGREEMENT / AUFTRAGSVERARBEITUNGSVERTRAG
 
-Supplier processes personal data on behalf of BMW for connected vehicle services.
-The agreement does not include an effective date. Supplier may appoint subprocessors
-with prior notice. The parties will comply with applicable data protection law.
+Classification: Synthetic demo contract for Harvey hackathon use only. Not legal advice.
+
+This Data Processing Agreement is entered into as of 15 May 2026 between BMW AG, Petuelring 130, 80788 Muenchen, Germany (BMW or Controller), and AtlasEdge AutoCloud GmbH, Speicherstrasse 18, 60327 Frankfurt am Main, Germany (Processor).
+
+Background. BMW is evaluating AtlasEdge's connected vehicle analytics platform for warranty triage, dealer service quality, fleet diagnostics, and over-the-air campaign readiness. AtlasEdge will host the service and process personal data only as described in this Agreement and the related pilot order form.
+
+1. Subject Matter and Duration. Processor will provide a cloud analytics environment for ingestion, normalization, dashboarding, and incident correlation of connected vehicle service events. Processing begins on 1 June 2026 and continues until the earlier of pilot termination or 31 May 2027, unless the parties sign a production order.
+
+2. BMW Instructions. Processor shall process personal data only on documented BMW instructions. However, Processor may use pseudonymized telemetry, service ticket metadata, and platform usage logs to improve its anomaly detection models, generate automotive industry benchmarks, and train synthetic-data generators unless BMW objects in writing within ten business days after signature.
+
+3. Categories of Data Subjects. Data subjects include vehicle users, drivers of BMW fleet vehicles, dealer service advisors, BMW warranty analysts, roadside assistance coordinators, supplier support engineers, and BMW employees participating in the pilot.
+
+4. Categories of Personal Data. The service may process vehicle identification number, pseudonymous driver profile ID, vehicle location at fault occurrence, timestamp, service event, warranty claim identifier, dealer code, service advisor name and work email, BMW employee user ID, diagnostic trouble codes, battery status, charging behavior, support ticket comments, IP address, and audit log data.
+
+5. Special and Sensitive Data. The parties do not intend to process special categories of personal data. The parties acknowledge that precise location, employee data, and driver behavior data require heightened review, and BMW may suspend data flows until the DPIA and any works council dependencies are complete.
+
+6. Subprocessors. Processor is generally authorized to engage subprocessors. Current subprocessors are CloudScale EU GmbH (Frankfurt hosting), RouteLens Analytics S.r.l. (Milan route enrichment), SupportOps India Pvt. Ltd. (Bangalore L2 support), and OpenMetrics Inc. (Virginia telemetry quality tooling). Processor will update its online list from time to time and provide seven days' notice before adding a new subprocessor. BMW may object only where it proves a material unresolved security risk.
+
+7. Third-Country Transfers. Production data will be hosted in Germany. Support personnel in India and the United States may access service data remotely for incident response, telemetry-quality troubleshooting, and model evaluation. Standard contractual clauses and a transfer impact assessment will be agreed before production launch.
+
+8. Security Measures. Processor shall maintain commercially reasonable technical and organisational measures. Annex 2 summarizes the current control set: TLS 1.2 or higher in transit, AES-256 at rest for production databases, role-based access, MFA for administrators, quarterly vulnerability scans, and 180-day audit log retention. Processor may modify controls if it determines the modified controls provide materially similar protection.
+
+9. Personal Data Breach. Processor will notify BMW within 72 hours after confirming that a security incident is a personal data breach. Initial notice will describe the affected systems if known. Processor will provide additional information after completing its forensic investigation and after receiving approval from its incident steering committee.
+
+10. Data Subject Requests. Processor shall forward any data subject request to BMW within five business days. Processor may charge professional services fees for search, export, correction, deletion, restriction, or objection support where requests exceed two hours of effort per calendar month.
+
+11. Data Subject Rights Waiver. To the fullest extent legally permissible, data subjects waive all data subject rights against Processor for service data that BMW submits to the platform. BMW remains responsible for notices to its employees, customers, and drivers.
+
+12. Audit. BMW may request a security questionnaire once per contract year. Processor will not permit onsite audits, direct access to systems, interviews with security personnel, or disclosure of penetration test reports. Processor may provide a management summary of external certifications if available.
+
+13. Return and Deletion. After termination, Processor will make a commercially reasonable export available for 30 days, delete active production data within 180 days, and delete routine backups within 18 months. Processor may retain aggregated, anonymized, pseudonymized, or synthetic data for service improvement.
+
+14. Confidentiality. Processor personnel with service access are subject to written confidentiality obligations. Processor may disclose BMW data to its affiliates, subprocessors, auditors, insurers, and professional advisors on a need-to-know basis.
+
+15. Liability. Processor's aggregate liability is capped at three months of fees paid under the pilot order. The cap applies to security incidents, data protection claims, third-party claims, and regulatory fines to the maximum extent permitted by law. Processor is not liable for indirect, consequential, special, punitive, or loss-of-profit damages.
+
+16. Governing Law and Venue. This Agreement is governed by German law. The courts of Munich have jurisdiction, except that Processor may seek payment relief in Frankfurt am Main.
+
+Annex 1 - Processing Matrix. Purpose: warranty triage and connected service analytics. Systems: AtlasEdge AutoCloud tenant BMW-PILOT-26. Retention: active service data until deletion under Section 13. BMW contact: privacy-legal@example.bmw. Processor contact: privacy@example-atlasedge.invalid.
+
+Annex 2 - Security Summary. Controls include tenant segregation, administrator MFA, endpoint management, encrypted backups, incident runbook, quarterly vulnerability scan, background checks for privileged administrators, and log monitoring for privileged access.
+
+Annex 3 - Subprocessor Table. CloudScale EU GmbH hosts production workloads in Frankfurt. RouteLens Analytics S.r.l. enriches route-risk data in Milan. SupportOps India Pvt. Ltd. provides L2 support from Bangalore. OpenMetrics Inc. performs telemetry quality tooling from Virginia under safeguards to be agreed.
+
+Negotiation Notes. BMW Privacy Legal should focus on DP-002, DP-004, DP-006, DP-007, DP-008, DP-009, DP-010, and DP-011 before any pilot data is loaded.

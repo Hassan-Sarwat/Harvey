@@ -1,6 +1,43 @@
-From: procurement@example.com
-To: legal@example.com
-Subject: Supplier liability position
+EMAIL THREAD - ATLASEDGE DATENSCHUTZ AGREEMENT
 
-The supplier rejected the liability cap and asked BMW to accept unlimited liability.
-Procurement needs to know whether this can proceed without legal review.
+Classification: Synthetic demo context for Harvey hackathon use only.
+
+Timestamp: 2026-04-22 09:12
+
+From: procurement.connected-services@example.bmw
+
+To: privacy-legal@example.bmw
+
+Subject: AtlasEdge DPA - pilot launch pressure
+
+AtlasEdge says the DPA is their standard for all automotive customers. The open points are subprocessor notice, US/India support, 72-hour breach notice, and data use for anomaly model training. Business wants to upload pilot data by 1 June.
+
+Timestamp: 2026-04-22 10:03
+
+From: privacy-legal@example.bmw
+
+To: procurement.connected-services@example.bmw
+
+Subject: RE: AtlasEdge DPA - pilot launch pressure
+
+Do not load real personal data until we have a named subprocessor list, transfer safeguards, 24-hour breach notice, audit evidence, and deletion commitments. The data subject rights waiver is a blocker.
+
+Timestamp: 2026-04-22 14:37
+
+From: supplier.legal@example-atlasedge.invalid
+
+To: procurement.connected-services@example.bmw
+
+Subject: DPA fallback positions
+
+We can extend subprocessor notice to 14 days. We cannot remove US telemetry quality tooling or model-improvement language for pilot tenants. We can provide a SOC 2 bridge letter but no onsite audit.
+
+Timestamp: 2026-04-23 08:44
+
+From: privacy-legal@example.bmw
+
+To: supplier.legal@example-atlasedge.invalid
+
+Subject: DPA fallback positions
+
+BMW can consider remote audits with independent reports for low-risk pilot data, but not for precise location, employee IDs, or driver behavior. Third-country access must be named and approved before data upload.

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import json
+import csv
 from pathlib import Path
 from typing import Any
 
 from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
 from app.agents.trigger_utils import missing_term_trigger, sentence_trigger_for_phrase
+
+
+PLAYBOOK_SOURCE = "BMW mock playbook"
 
 
 class PlaybookCheckerAgent(Agent):
@@ -18,10 +21,25 @@ class PlaybookCheckerAgent(Agent):
         uploaded_playbook_evidence = _uploaded_playbook_evidence(context.playbook_documents)
         dp_001 = _playbook_rule("data_protection", "DP-001")
         dp_002 = _playbook_rule("data_protection", "DP-002")
+        dp_003 = _playbook_rule("data_protection", "DP-003")
+        dp_004 = _playbook_rule("data_protection", "DP-004")
+        dp_005 = _playbook_rule("data_protection", "DP-005")
+        dp_006 = _playbook_rule("data_protection", "DP-006")
+        dp_007 = _playbook_rule("data_protection", "DP-007")
+        dp_008 = _playbook_rule("data_protection", "DP-008")
+        dp_009 = _playbook_rule("data_protection", "DP-009")
+        dp_011 = _playbook_rule("data_protection", "DP-011")
+        lt_002 = _playbook_rule("litigation", "LT-002")
         lt_003 = _playbook_rule("litigation", "LT-003")
+        lt_004 = _playbook_rule("litigation", "LT-004")
+        lt_005 = _playbook_rule("litigation", "LT-005")
+        lt_007 = _playbook_rule("litigation", "LT-007")
+        lt_008 = _playbook_rule("litigation", "LT-008")
+        lt_009 = _playbook_rule("litigation", "LT-009")
+        lt_011 = _playbook_rule("litigation", "LT-011")
 
         if "bmw" not in text:
-            ruling = _ruling_reference("BMW mock playbook", "data_protection", dp_001)
+            ruling = _ruling_reference(PLAYBOOK_SOURCE, "data_protection", dp_001)
             trigger = missing_term_trigger(context.contract_text, "BMW contracting entity is missing from the contract.")
             findings.append(
                 Finding(
@@ -46,7 +64,7 @@ class PlaybookCheckerAgent(Agent):
             )
 
         if "unlimited liability" in text:
-            ruling = _ruling_reference("BMW mock playbook", "litigation", lt_003)
+            ruling = _ruling_reference(PLAYBOOK_SOURCE, "litigation", lt_003)
             trigger = sentence_trigger_for_phrase(context.contract_text, "unlimited liability")
             findings.append(
                 Finding(
@@ -71,7 +89,7 @@ class PlaybookCheckerAgent(Agent):
             )
 
         if context.playbook_documents and "subprocessor" not in text and "personal data" in text:
-            ruling = _ruling_reference("BMW mock playbook", "data_protection", dp_002)
+            ruling = _ruling_reference(PLAYBOOK_SOURCE, "data_protection", dp_002)
             trigger = sentence_trigger_for_phrase(context.contract_text, "personal data")
             findings.append(
                 Finding(
@@ -97,9 +115,286 @@ class PlaybookCheckerAgent(Agent):
                 )
             )
 
+        if "waive all data subject rights" in text or "waives all data subject rights" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_003,
+                finding_id="data-subject-rights-waiver-playbook",
+                title="Data subject rights waiver violates BMW playbook",
+                description="The draft tries to waive statutory data subject rights, which is a blocker under the BMW Datenschutz playbook.",
+                phrase="waives all data subject rights" if "waives all data subject rights" in text else "waive all data subject rights",
+                severity=Severity.BLOCKER,
+                requires_escalation=True,
+                proposed_text=str(dp_003.get("approved_fix") or "Remove the waiver and preserve statutory data subject rights."),
+            )
+
+        if "own product improvement" in text or ("analytics purposes" in text and "company personal data" in text):
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_004,
+                finding_id="processor-purpose-drift",
+                title="Processor own-purpose use conflicts with BMW instructions",
+                description="The draft allows processor use of BMW personal data for product improvement, analytics, benchmarking, or similar own purposes.",
+                phrase="own product improvement" if "own product improvement" in text else "analytics purposes",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(dp_004.get("approved_fix") or "Restrict processing to documented BMW instructions and remove own-purpose use."),
+            )
+
+        if "any subprocessor on general authorization" in text or "subprocessors at its discretion" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_002,
+                finding_id="subprocessor-general-authorization",
+                title="Subprocessor authorization is too broad",
+                description="The draft gives broad subprocessor authorization without the BMW notice and objection controls required by the playbook.",
+                phrase="any subprocessor on general authorization" if "any subprocessor on general authorization" in text else "subprocessors at its discretion",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(dp_002.get("approved_fix") or "Require a named subprocessor list and prior notice with objection rights."),
+            )
+
+        breach_notice_phrase = None
+        if "as soon as reasonably practicable" in text and "breach" in text:
+            breach_notice_phrase = "as soon as reasonably practicable"
+        elif "72 hours" in text and "breach" in text:
+            breach_notice_phrase = "72 hours"
+        if breach_notice_phrase:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_006,
+                finding_id="breach-notice-too-long",
+                title="Breach notice exceeds BMW default",
+                description="The draft uses a vague or delayed breach notice position instead of BMW's prompt processor notice default.",
+                phrase=breach_notice_phrase,
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(dp_006.get("approved_fix") or "Require notice within 24 hours after awareness of a suspected or actual breach."),
+            )
+
+        if "commercially reasonable security measures" in text or "as it deems appropriate" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_005,
+                finding_id="generic-security-measures",
+                title="Security measures are too generic",
+                description="The draft relies on generic commercially reasonable security language instead of concrete technical and organizational measures.",
+                phrase="commercially reasonable security measures" if "commercially reasonable security measures" in text else "as it deems appropriate",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(dp_005.get("approved_fix") or "Attach concrete technical and organizational measures under GDPR Art. 32."),
+            )
+
+        if ("united states" in text or "india" in text) and ("to be agreed" in text or "remote access" in text):
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_007,
+                finding_id="third-country-transfer-incomplete",
+                title="Third-country safeguards are incomplete",
+                description="The draft permits third-country access before SCCs, transfer assessment, and BMW approval are complete.",
+                phrase="to be agreed" if "to be agreed" in text else "remote access",
+                severity=Severity.BLOCKER,
+                requires_escalation=True,
+                proposed_text=str(dp_007.get("approved_fix") or "List and approve all third-country access before any transfer or remote access."),
+            )
+
+        if "will not permit onsite audits" in text or "security questionnaire once" in text or "once every three years" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_008,
+                finding_id="audit-rights-too-limited",
+                title="Audit rights are too limited",
+                description="The draft limits BMW to questionnaire-only evidence and excludes meaningful audit rights.",
+                phrase="will not permit onsite audits" if "will not permit onsite audits" in text else "security questionnaire once" if "security questionnaire once" in text else "once every three years",
+                severity=Severity.MEDIUM,
+                requires_escalation=False,
+                proposed_text=str(dp_008.get("approved_fix") or "Require evidence access and proportionate audit rights."),
+            )
+
+        if "delete active production data within 180 days" in text or ("180 days" in text and "delete" in text):
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_009,
+                finding_id="deletion-period-too-long",
+                title="Deletion period exceeds BMW default",
+                description="The draft allows active data retention for 180 days after termination, above the BMW 30-day default.",
+                phrase="180 days",
+                severity=Severity.MEDIUM,
+                requires_escalation=False,
+                proposed_text=str(dp_009.get("approved_fix") or "Require return or deletion within 30 days and backup purge within 90 days."),
+            )
+
+        if "ai models" in text or "model training" in text or "synthetic-data generators" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_011,
+                finding_id="ai-training-rights",
+                title="Supplier AI training rights need approval",
+                description="The draft lets the supplier use BMW data or derived data for model improvement without a separate BMW approval path.",
+                phrase="ai models" if "ai models" in text else "model training" if "model training" in text else "synthetic-data generators",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(dp_011.get("approved_fix") or "Remove AI training rights unless separately approved by BMW."),
+            )
+
+        if "may recommend and negotiate nuisance settlements" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_002,
+                finding_id="settlement-authority-delegated",
+                title="Settlement authority is delegated outside BMW Legal",
+                description="The draft lets the service provider negotiate settlements and relies on business approval rather than BMW Legal authority.",
+                phrase="may recommend and negotiate nuisance settlements",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(lt_002.get("approved_fix") or "Reserve all settlements and admissions for BMW Legal approval."),
+            )
+
+        if "paid preservation work order" in text or "routine deletion" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_004,
+                finding_id="legal-hold-conditioned-on-payment",
+                title="Legal hold preservation is not immediate",
+                description="The draft allows ordinary deletion until a paid preservation work order is approved.",
+                phrase="paid preservation work order" if "paid preservation work order" in text else "routine deletion",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(lt_004.get("approved_fix") or "Require immediate preservation and suspension of deletion after BMW legal hold notice."),
+            )
+
+        if "may nevertheless disclose investigation notes" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_005,
+                finding_id="privilege-disclosure-risk",
+                title="Privilege and investigation material disclosure risk",
+                description="The draft permits disclosure of investigation notes and expert drafts without BMW Legal control.",
+                phrase="may nevertheless disclose investigation notes",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(lt_005.get("approved_fix") or "Route privileged and investigation materials through BMW Legal approval."),
+            )
+
+        if "courts of dublin" in text or "rules agreed after a dispute arises" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_007,
+                finding_id="forum-selection-risk",
+                title="Forum clause deviates from BMW litigation default",
+                description="The draft uses a non-BMW forum position and may block urgent relief.",
+                phrase="courts of dublin" if "courts of dublin" in text else "rules agreed after a dispute arises",
+                severity=Severity.MEDIUM,
+                requires_escalation=False,
+                proposed_text=str(lt_007.get("approved_fix") or "Use an approved German or neutral forum clause."),
+            )
+
+        if "expire six months" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_008,
+                finding_id="short-limitation-period",
+                title="Limitation period is too short",
+                description="The draft applies a six-month limitation period even to high-risk claims.",
+                phrase="expire six months",
+                severity=Severity.MEDIUM,
+                requires_escalation=True,
+                proposed_text=str(lt_008.get("approved_fix") or "Preserve statutory limitation periods for high-risk and mandatory claims."),
+            )
+
+        if "bmw shall indemnify service provider" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_009,
+                finding_id="broad-indemnity",
+                title="Broad one-sided indemnity",
+                description="The draft imposes a broad indemnity on BMW for claims, fines, sanctions, fees, and settlement amounts.",
+                phrase="bmw shall indemnify service provider",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(lt_009.get("approved_fix") or "Limit indemnities to direct third-party claims caused by the indemnifying party's breach."),
+            )
+
+        if "may communicate with regulators" in text:
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="litigation",
+                rule=lt_011,
+                finding_id="unilateral-regulatory-communications",
+                title="Supplier can make unilateral regulatory communications",
+                description="The draft allows the supplier to contact regulators, claimants, courts, and opposing experts without BMW Legal approval.",
+                phrase="may communicate with regulators",
+                severity=Severity.HIGH,
+                requires_escalation=True,
+                proposed_text=str(lt_011.get("approved_fix") or "Require BMW Legal approval before voluntary communications or admissions."),
+            )
+
         return AgentResult(
             agent_name=self.name,
-            summary="Checked draft against mock BMW playbook rules.",
+            summary="Checked draft against BMW mock playbook CSV rules.",
             findings=findings,
             suggestions=suggestions,
             confidence=0.7,
@@ -126,16 +421,57 @@ def _uploaded_playbook_evidence(documents: list[dict]) -> list[Evidence]:
 
 
 def _playbook_rule(scope: str, rule_id: str) -> dict[str, Any]:
-    file_name = "bmw_data_protection.json" if scope == "data_protection" else "bmw_litigation.json"
+    file_name = "bmw_data_protection.csv" if scope == "data_protection" else "bmw_litigation.csv"
     path = Path(__file__).resolve().parents[3] / "data" / "playbook" / file_name
     if not path.exists():
         return {"id": rule_id, "title": rule_id, "default": "Playbook rule unavailable."}
 
-    playbook = json.loads(path.read_text(encoding="utf-8"))
-    for rule in playbook.get("rules", []):
+    with path.open(encoding="utf-8", newline="") as handle:
+        playbook = list(csv.DictReader(handle))
+    for rule in playbook:
         if rule.get("id") == rule_id:
             return rule
     return {"id": rule_id, "title": rule_id, "default": "Playbook rule unavailable."}
+
+
+def _add_rule_finding(
+    findings: list[Finding],
+    suggestions: list[Suggestion],
+    context: ReviewContext,
+    uploaded_playbook_evidence: list[Evidence],
+    *,
+    scope: str,
+    rule: dict[str, Any],
+    finding_id: str,
+    title: str,
+    description: str,
+    phrase: str,
+    severity: Severity,
+    requires_escalation: bool,
+    proposed_text: str,
+) -> None:
+    ruling = _ruling_reference(PLAYBOOK_SOURCE, scope, rule)
+    trigger = sentence_trigger_for_phrase(context.contract_text, phrase)
+    findings.append(
+        Finding(
+            id=finding_id,
+            title=title,
+            description=description,
+            severity=severity,
+            clause_reference=trigger.text if trigger else None,
+            trigger=trigger,
+            ruling=ruling,
+            evidence=[_evidence_from_ruling(ruling)] + uploaded_playbook_evidence,
+            requires_escalation=requires_escalation,
+        )
+    )
+    suggestions.append(
+        Suggestion(
+            finding_id=finding_id,
+            proposed_text=proposed_text,
+            rationale=f"BMW playbook rule {rule.get('id', 'unknown')} sets this as the approved position.",
+        )
+    )
 
 
 def _ruling_reference(source: str, scope: str, rule: dict[str, Any]) -> RulingReference:

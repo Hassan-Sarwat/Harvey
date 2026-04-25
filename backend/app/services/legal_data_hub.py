@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import csv
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +37,9 @@ class LegalDataHubClient:
         return self._fallback(domain)
 
     def _fallback(self, domain: str) -> list[dict[str, Any]]:
-        file_name = "datenschutz_evidence.json" if domain == "data_protection" else "litigation_evidence.json"
+        file_name = "datenschutz_evidence.csv" if domain == "data_protection" else "litigation_evidence.csv"
         fallback_path = Path(__file__).resolve().parents[3] / "data" / "legal_fallback" / file_name
         if not fallback_path.exists():
             return []
-        return json.loads(fallback_path.read_text(encoding="utf-8"))
+        with fallback_path.open(encoding="utf-8", newline="") as handle:
+            return list(csv.DictReader(handle))
