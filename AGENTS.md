@@ -92,6 +92,6 @@ Default URLs:
 ## Current Constraints
 - This is a skeleton, not a production system.
 - No production authentication or authorization yet.
-- No persistent database implementation yet.
+- Local SQLite persistence tracks contract identities and version history.
 - No OCR or advanced document parsing yet.
 - Legal outputs are starter examples and must be validated by legal experts before demo claims are made.

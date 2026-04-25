@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
 
@@ -8,6 +9,8 @@ from starlette.datastructures import UploadFile
 
 from app.agents.legal_checker import LegalDataHubClient
 from app.api import contracts
+from app.services.contract_repository import ContractRepository
+from app.services.escalation_repository import EscalationRepository
 from app.services.review_storage import DocumentStore
 
 
@@ -29,6 +32,7 @@ async def test_upload_playbook_documents_preserves_folder_paths(tmp_path, monkey
 
 async def test_review_uploaded_contract_stores_pdf_and_agent_reactions(tmp_path, monkeypatch):
     monkeypatch.setattr(contracts, "DocumentStore", lambda: DocumentStore(str(tmp_path)))
+    monkeypatch.setattr(contracts, "EscalationRepository", lambda: EscalationRepository(f"sqlite:///{tmp_path / 'harvey.db'}"))
     monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
 
     playbook_payload = await contracts.upload_playbook_documents(
@@ -53,6 +57,76 @@ async def test_review_uploaded_contract_stores_pdf_and_agent_reactions(tmp_path,
     persisted = json.loads(review_path.read_text(encoding="utf-8"))
     assert persisted["contract_document"]["filename"] == "supplier-dpa.pdf"
     assert persisted["review_result"]["metadata"]["agent_results"]
+
+
+async def test_reupload_same_identity_creates_contract_version_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(contracts, "DocumentStore", lambda: DocumentStore(str(tmp_path)))
+    monkeypatch.setattr(contracts, "ContractRepository", lambda: ContractRepository(f"sqlite:///{tmp_path / 'harvey.db'}"))
+    monkeypatch.setattr(contracts, "EscalationRepository", lambda: EscalationRepository(f"sqlite:///{tmp_path / 'harvey.db'}"))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    first = await contracts.review_uploaded_contract_by_identity(
+        contract_type="data_protection",
+        vendor="ACME GmbH",
+        effective_start_date=date(2026, 1, 1),
+        effective_end_date=date(2026, 12, 31),
+        playbook_id=None,
+        file=_upload_file("supplier-dpa-v1.pdf", b"BMW supplier processes personal data."),
+    )
+    second = await contracts.review_uploaded_contract_by_identity(
+        contract_type=" data_protection ",
+        vendor=" acme gmbh ",
+        effective_start_date=date(2026, 1, 1),
+        effective_end_date=date(2026, 12, 31),
+        playbook_id=None,
+        file=_upload_file("supplier-dpa-v2.pdf", b"Supplier processes personal data. Supplier accepts unlimited liability."),
+    )
+
+    assert first["contract_id"] == second["contract_id"]
+    assert first["version_number"] == 1
+    assert second["version_number"] == 2
+    assert first["is_new_contract"] is True
+    assert second["is_new_contract"] is False
+    assert "/versions/v1/" in first["metadata"]["contract_document"]["stored_path"]
+    assert "/versions/v2/" in second["metadata"]["contract_document"]["stored_path"]
+
+    history = await contracts.list_contract_versions(first["contract_id"])
+    assert [version["version_number"] for version in history["versions"]] == [1, 2]
+    assert history["versions"][1]["ai_suggestions"]
+
+    version = await contracts.get_contract_version(first["contract_id"], 2)
+    assert version["review_result"]["metadata"]["agent_results"]
+
+
+async def test_changed_contract_identity_creates_new_contract(tmp_path, monkeypatch):
+    monkeypatch.setattr(contracts, "DocumentStore", lambda: DocumentStore(str(tmp_path)))
+    monkeypatch.setattr(contracts, "ContractRepository", lambda: ContractRepository(f"sqlite:///{tmp_path / 'harvey.db'}"))
+    monkeypatch.setattr(contracts, "EscalationRepository", lambda: EscalationRepository(f"sqlite:///{tmp_path / 'harvey.db'}"))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    first = await contracts.review_contract_by_identity(
+        contracts.ContractReviewRequest(
+            contract_text="BMW supplier processes personal data.",
+            contract_type="data_protection",
+            vendor="ACME GmbH",
+            effective_start_date=date(2026, 1, 1),
+            effective_end_date=date(2026, 12, 31),
+        )
+    )
+    second = await contracts.review_contract_by_identity(
+        contracts.ContractReviewRequest(
+            contract_text="BMW supplier processes personal data.",
+            contract_type="data_protection",
+            vendor="Different GmbH",
+            effective_start_date=date(2026, 1, 1),
+            effective_end_date=date(2026, 12, 31),
+        )
+    )
+
+    assert first["contract_id"] != second["contract_id"]
+    assert first["version_number"] == 1
+    assert second["version_number"] == 1
+    assert second["is_new_contract"] is True
 
 
 def _upload_file(filename: str, content: bytes) -> UploadFile:

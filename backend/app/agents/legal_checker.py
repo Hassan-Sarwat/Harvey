@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, Severity
+from typing import Any
+
+from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
+from app.agents.trigger_utils import sentence_trigger_for_phrase
 from app.services.legal_data_hub import LegalDataHubClient
 
 
@@ -17,17 +20,23 @@ class LegalCheckerAgent(Agent):
         )
 
         findings: list[Finding] = []
+        suggestions: list[Suggestion] = []
         lower_text = context.contract_text.lower()
         if "waives all data subject rights" in lower_text:
+            ruling = _ruling_reference(evidence)
+            trigger = sentence_trigger_for_phrase(context.contract_text, "waives all data subject rights")
             findings.append(
                 Finding(
                     id="illegal-data-subject-right-waiver",
                     title="Potentially unlawful data subject rights waiver",
                     description="The draft appears to waive all data subject rights and needs legal review.",
                     severity=Severity.BLOCKER,
+                    clause_reference=trigger.text if trigger else None,
+                    trigger=trigger,
+                    ruling=ruling,
                     evidence=[
                         Evidence(
-                            source=item.get("source", "Legal Data Hub fallback"),
+                            source=_evidence_source(item),
                             citation=item.get("citation", "GDPR evidence"),
                             quote=item.get("quote"),
                             url=item.get("url"),
@@ -37,12 +46,40 @@ class LegalCheckerAgent(Agent):
                     requires_escalation=True,
                 )
             )
+            suggestions.append(
+                Suggestion(
+                    finding_id="illegal-data-subject-right-waiver",
+                    proposed_text="Remove the waiver and preserve statutory GDPR data subject rights, including transparency, access, rectification, erasure, restriction, portability, and objection rights.",
+                    rationale="The cited Legal Data Hub evidence identifies these rights as statutory rights that should not be waived in the draft.",
+                )
+            )
 
         return AgentResult(
             agent_name=self.name,
             summary="Checked draft against German legal evidence sources.",
             findings=findings,
+            suggestions=suggestions,
             confidence=0.62 if evidence else 0.35,
             requires_escalation=any(f.requires_escalation for f in findings),
             metadata={"evidence_count": len(evidence)},
         )
+
+
+def _ruling_reference(evidence: list[dict[str, Any]]) -> RulingReference | None:
+    if not evidence:
+        return None
+
+    item = evidence[0]
+    return RulingReference(
+        source=_evidence_source(item),
+        citation=str(item.get("citation") or "Legal Data Hub evidence"),
+        quote=str(item.get("quote") or "Legal evidence returned without quoted text."),
+        url=item.get("url"),
+    )
+
+
+def _evidence_source(item: dict[str, Any]) -> str:
+    source = str(item.get("source") or "Legal Data Hub fallback")
+    if source == "Legal Data Hub fallback":
+        return "Otto Schmidt / Legal Data Hub fallback"
+    return source

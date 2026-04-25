@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import contracts, dashboard, escalations, legal_qa
 from app.core.config import get_settings
+from app.services.contract_repository import ContractRepository
+from app.services.escalation_repository import EscalationRepository
 
 settings = get_settings()
 
@@ -22,6 +24,12 @@ app.include_router(contracts.router)
 app.include_router(legal_qa.router)
 app.include_router(escalations.router)
 app.include_router(dashboard.router)
+
+
+@app.on_event("startup")
+async def initialize_database() -> None:
+    ContractRepository()
+    EscalationRepository()
 
 
 @app.get("/health")

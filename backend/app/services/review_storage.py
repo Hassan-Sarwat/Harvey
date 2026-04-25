@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -55,14 +56,23 @@ class DocumentStore:
             document["text"] = text_path.read_text(encoding="utf-8") if text_path.exists() else ""
         return documents
 
-    def save_contract_document(self, contract_id: str, filename: str, content: bytes) -> dict[str, Any]:
+    def save_contract_document(
+        self,
+        contract_id: str,
+        filename: str,
+        content: bytes,
+        version_number: int | None = None,
+    ) -> dict[str, Any]:
         relative_path = safe_upload_path(filename)
-        target = self.root / "contracts" / contract_id / "source" / Path(*relative_path.parts)
+        contract_root = self.root / "contracts" / contract_id
+        if version_number is not None:
+            contract_root = contract_root / "versions" / f"v{version_number}"
+        target = contract_root / "source" / Path(*relative_path.parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
 
         extracted_text = extract_document_text(filename, content)
-        text_path = self.root / "contracts" / contract_id / "extracted" / f"{target.name}.txt"
+        text_path = contract_root / "extracted" / f"{target.name}.txt"
         text_path.parent.mkdir(parents=True, exist_ok=True)
         text_path.write_text(extracted_text, encoding="utf-8")
 
@@ -71,13 +81,23 @@ class DocumentStore:
             "filename": filename,
             "stored_path": str(target),
             "extracted_text_path": str(text_path),
+            "content_hash": sha256(content).hexdigest(),
             "character_count": len(extracted_text),
             "text": extracted_text,
             "uploaded_at": _utc_now(),
         }
 
-    def save_review_result(self, contract_id: str, contract_document: dict[str, Any], result: AgentResult) -> Path:
-        review_path = self.root / "contracts" / contract_id / "review.json"
+    def save_review_result(
+        self,
+        contract_id: str,
+        contract_document: dict[str, Any],
+        result: AgentResult,
+        version_number: int | None = None,
+    ) -> Path:
+        contract_root = self.root / "contracts" / contract_id
+        if version_number is not None:
+            contract_root = contract_root / "versions" / f"v{version_number}"
+        review_path = contract_root / "review.json"
         review_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "contract_id": contract_id,

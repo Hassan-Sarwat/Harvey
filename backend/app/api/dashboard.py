@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.services.escalation_repository import EscalationRepository
+
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/metrics")
 async def metrics() -> dict:
-    return {
+    payload = {
         "ai_approved": 3,
         "escalated": 2,
         "average_contract_value_vs_default": [
@@ -15,3 +17,5 @@ async def metrics() -> dict:
         ],
         "frequent_playbook_deviations": ["unlimited liability", "missing DPA subprocessors list"],
     }
+    payload["escalation_metrics"] = EscalationRepository().escalation_metrics()
+    return payload

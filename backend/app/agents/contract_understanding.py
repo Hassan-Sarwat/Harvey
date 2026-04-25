@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.agents.base import Agent, AgentResult, Finding, ReviewContext, Severity
+from app.agents.trigger_utils import missing_term_trigger
 
 
 class ContractUnderstandingAgent(Agent):
@@ -11,12 +12,15 @@ class ContractUnderstandingAgent(Agent):
         lower_text = context.contract_text.lower()
 
         if "effective date" not in lower_text and "commencement date" not in lower_text:
+            trigger = missing_term_trigger(context.contract_text, "Effective date or commencement date is missing.")
             findings.append(
                 Finding(
                     id="missing-effective-date",
                     title="Effective date is missing",
                     description="The contract text does not clearly identify an effective or commencement date.",
                     severity=Severity.MEDIUM,
+                    clause_reference=trigger.text,
+                    trigger=trigger,
                     requires_escalation=False,
                 )
             )

@@ -22,6 +22,19 @@ class Evidence(BaseModel):
     url: str | None = None
 
 
+class ContractTrigger(BaseModel):
+    text: str
+    start: int | None = None
+    end: int | None = None
+
+
+class RulingReference(BaseModel):
+    source: str
+    citation: str
+    quote: str
+    url: str | None = None
+
+
 class Suggestion(BaseModel):
     finding_id: str
     proposed_text: str
@@ -34,6 +47,8 @@ class Finding(BaseModel):
     description: str
     severity: Severity
     clause_reference: str | None = None
+    trigger: ContractTrigger | None = None
+    ruling: RulingReference | None = None
     evidence: list[Evidence] = Field(default_factory=list)
     requires_escalation: bool = False
 

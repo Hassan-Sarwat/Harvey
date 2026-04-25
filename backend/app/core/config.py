@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     legal_data_hub_base_url: str = "https://api.legal-data-analytics.com"
     use_legal_fallback: bool = True
     upload_storage_dir: str = "storage"
+    database_url: str | None = None
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8")
 
