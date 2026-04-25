@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Upload, Sparkles, Loader2, FileText, Send, Paperclip, CheckCircle2, ShieldAlert, XCircle,
+  Upload, Sparkles, Loader2, FileText, Send, Paperclip, CheckCircle2, ShieldAlert,
   AlertTriangle, FileWarning,
 } from "lucide-react";
 import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
@@ -14,6 +14,7 @@ import {
   type ReviewAuditResult,
   type ReviewResponse,
   type ReviewViolation,
+  escalateContractVersion,
   reviewContractFile,
   reviewContractText,
   toAuditResult,
@@ -29,10 +30,9 @@ type ChatMsg =
   | { role: "assistant"; kind: "audit"; result: ReviewAuditResult };
 
 const DEFAULT_IDENTITY: ContractIdentity = {
-  contractType: "data_protection",
+  contractType: "",
   vendor: "GlobalCloud Services Ltd.",
-  effectiveStartDate: "2026-01-01",
-  effectiveEndDate: "2026-12-31",
+  effectiveDate: "2026-01-01",
 };
 
 export const ReviewView = () => {
@@ -40,6 +40,7 @@ export const ReviewView = () => {
   const [input, setInput] = useState("");
   const [identity, setIdentity] = useState<ContractIdentity>(DEFAULT_IDENTITY);
   const [loading, setLoading] = useState(false);
+  const [escalatingKey, setEscalatingKey] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -62,7 +63,11 @@ export const ReviewView = () => {
 
   const loadSample = () => {
     if (loading) return;
-    const sampleIdentity = { ...identity, vendor: identity.vendor.trim() || DEFAULT_IDENTITY.vendor };
+    const sampleIdentity = {
+      ...identity,
+      vendor: identity.vendor.trim() || DEFAULT_IDENTITY.vendor,
+      effectiveDate: identity.effectiveDate || DEFAULT_IDENTITY.effectiveDate,
+    };
     setIdentity(sampleIdentity);
     setMessages((m) => [
       ...m,
@@ -97,13 +102,52 @@ export const ReviewView = () => {
         ...m.filter((x) => !(x.role === "assistant" && x.kind === "thinking")),
         { role: "assistant", kind: "audit", result },
       ]);
-      toast.success(result.escalation_required ? "Review complete and escalated" : "Review complete");
+      toast.success(result.status === "Approved" ? "Review accepted" : "Review complete with suggested edits");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Review failed";
       setMessages((m) => m.filter((x) => !(x.role === "assistant" && x.kind === "thinking")));
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const escalateToLegal = async (result: ReviewAuditResult) => {
+    if (!result.contract_id || !result.version_number) {
+      toast.error("Stored contract version is required before legal escalation.");
+      return;
+    }
+
+    const key = auditKey(result);
+    setEscalatingKey(key);
+    try {
+      const escalation = await escalateContractVersion(result.contract_id, result.version_number, {
+        reason: "Business user declined or cannot obtain the suggested contract edits.",
+        requested_by: "business-user",
+      });
+      setMessages((current) =>
+        current.map((message) => {
+          if (message.role !== "assistant" || message.kind !== "audit" || auditKey(message.result) !== key) {
+            return message;
+          }
+          return {
+            ...message,
+            result: {
+              ...message.result,
+              status: "Escalated",
+              escalation_id: escalation.id,
+              escalation_created: true,
+              can_escalate: false,
+            },
+          };
+        }),
+      );
+      toast.success(`Legal ticket ${escalation.id} created`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Legal escalation failed";
+      toast.error(message);
+    } finally {
+      setEscalatingKey(null);
     }
   };
 
@@ -120,7 +164,13 @@ export const ReviewView = () => {
               <div className="space-y-6">
                 <AnimatePresence initial={false}>
                   {messages.map((m, i) => (
-                    <MessageBubble key={i} m={m} />
+                    <MessageBubble
+                      key={i}
+                      m={m}
+                      onEscalate={escalateToLegal}
+                      onUploadRevision={() => fileRef.current?.click()}
+                      escalatingKey={escalatingKey}
+                    />
                   ))}
                 </AnimatePresence>
               </div>
@@ -130,7 +180,7 @@ export const ReviewView = () => {
 
         <div className="border-t border-border/60 bg-background/80 backdrop-blur">
           <div className="max-w-3xl mx-auto px-6 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
               <IdentityField label="Vendor">
                 <input
                   value={identity.vendor}
@@ -140,28 +190,21 @@ export const ReviewView = () => {
               </IdentityField>
               <IdentityField label="Contract Type">
                 <select
-                  value={identity.contractType}
+                  value={identity.contractType ?? ""}
                   onChange={(event) => setIdentity((current) => ({ ...current, contractType: event.target.value }))}
                   className="w-full min-w-0 bg-card/60 border border-border/70 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-primary/60"
                 >
+                  <option value="">Auto detect</option>
                   <option value="data_protection">Data protection</option>
                   <option value="litigation">Litigation</option>
                   <option value="general">General</option>
                 </select>
               </IdentityField>
-              <IdentityField label="Start Date">
+              <IdentityField label="Effective Date">
                 <input
                   type="date"
-                  value={identity.effectiveStartDate}
-                  onChange={(event) => setIdentity((current) => ({ ...current, effectiveStartDate: event.target.value }))}
-                  className="w-full min-w-0 bg-card/60 border border-border/70 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-primary/60"
-                />
-              </IdentityField>
-              <IdentityField label="End Date">
-                <input
-                  type="date"
-                  value={identity.effectiveEndDate}
-                  onChange={(event) => setIdentity((current) => ({ ...current, effectiveEndDate: event.target.value }))}
+                  value={identity.effectiveDate}
+                  onChange={(event) => setIdentity((current) => ({ ...current, effectiveDate: event.target.value }))}
                   className="w-full min-w-0 bg-card/60 border border-border/70 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-primary/60"
                 />
               </IdentityField>
@@ -246,8 +289,8 @@ const Welcome = ({ onSample, onUpload }: { onSample: () => void; onUpload: () =>
       Review a contract in <span className="text-gradient">seconds</span>
     </h1>
     <p className="text-muted-foreground max-w-xl mx-auto mb-10">
-      Drop a Data Processing Agreement and Harvey will check the draft against BMW mock rules and legal evidence,
-      then create an escalation when legal judgment is required.
+      Drop a contract and Harvey will check the draft against BMW mock rules and legal evidence,
+      then return suggested edits before legal escalation.
     </p>
     <div className="grid sm:grid-cols-2 gap-3 max-w-xl mx-auto">
       <button
@@ -270,7 +313,17 @@ const Welcome = ({ onSample, onUpload }: { onSample: () => void; onUpload: () =>
   </motion.div>
 );
 
-const MessageBubble = ({ m }: { m: ChatMsg }) => {
+const MessageBubble = ({
+  m,
+  onEscalate,
+  onUploadRevision,
+  escalatingKey,
+}: {
+  m: ChatMsg;
+  onEscalate: (result: ReviewAuditResult) => void;
+  onUploadRevision: () => void;
+  escalatingKey: string | null;
+}) => {
   if (m.role === "user" && m.kind === "upload") {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end">
@@ -305,14 +358,32 @@ const MessageBubble = ({ m }: { m: ChatMsg }) => {
       </motion.div>
     );
   }
-  return <AuditMessage result={(m as Extract<ChatMsg, { kind: "audit" }>).result} />;
+  const result = (m as Extract<ChatMsg, { kind: "audit" }>).result;
+  return (
+    <AuditMessage
+      result={result}
+      onEscalate={onEscalate}
+      onUploadRevision={onUploadRevision}
+      escalating={escalatingKey === auditKey(result)}
+    />
+  );
 };
 
-const AuditMessage = ({ result }: { result: ReviewAuditResult }) => {
+const AuditMessage = ({
+  result,
+  onEscalate,
+  onUploadRevision,
+  escalating,
+}: {
+  result: ReviewAuditResult;
+  onEscalate: (result: ReviewAuditResult) => void;
+  onUploadRevision: () => void;
+  escalating: boolean;
+}) => {
   const map = {
     Approved: { icon: CheckCircle2, color: "success", label: "Approved" },
-    Escalated: { icon: ShieldAlert, color: "warning", label: "Escalated" },
-    Rejected: { icon: XCircle, color: "destructive", label: "Needs revision" },
+    Escalated: { icon: ShieldAlert, color: "warning", label: "Pending legal" },
+    NeedsRevision: { icon: AlertTriangle, color: "warning", label: "Needs revision" },
   } as const;
   const v = map[result.status];
   const Icon = v.icon;
@@ -349,7 +420,7 @@ const AuditMessage = ({ result }: { result: ReviewAuditResult }) => {
           )}
         </div>
 
-        {result.escalation_required && (
+        {result.status === "NeedsRevision" && (
           <div
             className="rounded-2xl border-2 p-4 flex items-start gap-3"
             style={{
@@ -358,12 +429,44 @@ const AuditMessage = ({ result }: { result: ReviewAuditResult }) => {
             }}
           >
             <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "hsl(var(--warning))" }} />
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="font-bold text-sm" style={{ color: "hsl(var(--warning))" }}>
-                Requires legal counsel review
+                Business review required
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                {result.escalation_id ? `Escalation ${result.escalation_id} was created in the legal queue.` : "Open the escalation queue for legal context."}
+                Use the suggested edits for a revised version, or escalate this version if the changes are declined.
+              </div>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Button type="button" size="sm" variant="outline" onClick={onUploadRevision}>
+                  <Paperclip className="h-4 w-4 mr-1.5" />
+                  Upload revised version
+                </Button>
+                {result.can_escalate && (
+                  <Button type="button" size="sm" onClick={() => onEscalate(result)} disabled={escalating}>
+                    {escalating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <ShieldAlert className="h-4 w-4 mr-1.5" />}
+                    Escalate to legal
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {result.status === "Escalated" && (
+          <div
+            className="rounded-2xl border-2 p-4 flex items-start gap-3"
+            style={{
+              borderColor: "hsl(var(--warning) / 0.5)",
+              background: "linear-gradient(135deg, hsl(var(--warning) / 0.08), hsl(var(--warning) / 0.02))",
+            }}
+          >
+            <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "hsl(var(--warning))" }} />
+            <div>
+              <div className="font-bold text-sm" style={{ color: "hsl(var(--warning))" }}>
+                Pending legal review
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {result.escalation_id ? `Ticket ${result.escalation_id} is waiting for legal approval or denial.` : "This version is waiting for legal approval or denial."}
               </div>
             </div>
           </div>
@@ -467,19 +570,19 @@ function buildIdentity(identity: ContractIdentity, fileName: string): ContractId
   const candidate = {
     ...identity,
     vendor: identity.vendor.trim() || inferVendor(fileName),
-    contractType: identity.contractType.trim() || "data_protection",
+    contractType: identity.contractType?.trim() ?? "",
   };
 
-  if (!candidate.vendor || !candidate.effectiveStartDate || !candidate.effectiveEndDate) {
-    toast.error("Vendor, start date, and end date are required.");
-    return null;
-  }
-  if (candidate.effectiveEndDate < candidate.effectiveStartDate) {
-    toast.error("End date must be on or after start date.");
+  if (!candidate.vendor || !candidate.effectiveDate) {
+    toast.error("Vendor and effective date are required.");
     return null;
   }
 
   return candidate;
+}
+
+function auditKey(result: ReviewAuditResult) {
+  return `${result.contract_id ?? "contract"}:${result.version_number ?? "version"}`;
 }
 
 function inferVendor(fileName: string) {

@@ -19,7 +19,9 @@ def test_escalation_repository_tracks_denied_as_positive_escalation(tmp_path):
     escalation = repository.create_from_review(contract_id="contract-1", review_result=_escalating_result())
 
     assert escalation is not None
+    assert escalation["ticket_id"].startswith("TCK-")
     assert escalation["status"] == "pending_legal"
+    assert escalation["highest_severity"] == "blocker"
     assert escalation["source_agents"] == ["playbook_checker", "legal_checker"]
 
     decided = repository.decide_escalation(
@@ -119,6 +121,22 @@ def test_escalation_detail_includes_contract_text_and_trigger_annotations(tmp_pa
     assert liability["suggestions"][0]["finding_id"] == "unlimited-liability"
 
 
+def test_escalation_list_and_detail_share_ticket_identity(tmp_path):
+    repository = EscalationRepository(f"sqlite:///{tmp_path / 'harvey.db'}")
+    escalation = repository.create_from_review(
+        contract_id="contract-1",
+        review_result=_escalating_result(),
+        contract_text="Supplier accepts unlimited liability.",
+    )
+
+    listed = repository.list_escalations(status="pending_legal")[0]
+    detail = repository.get_escalation(escalation["id"])
+
+    assert listed["ticket_id"] == escalation["ticket_id"]
+    assert detail["ticket_id"] == escalation["ticket_id"]
+    assert listed["highest_severity"] == "blocker"
+
+
 async def test_escalation_chat_answers_from_trigger_context(tmp_path, monkeypatch):
     repository = EscalationRepository(f"sqlite:///{tmp_path / 'harvey.db'}")
     monkeypatch.setattr(escalations, "EscalationRepository", lambda: repository)
@@ -155,7 +173,7 @@ async def test_dashboard_uses_live_escalation_metrics(tmp_path, monkeypatch):
     assert payload["escalation_metrics"]["top_false_escalation_agent"]["agent_name"] == "playbook_checker"
 
 
-async def test_review_endpoint_adds_escalation_metadata(tmp_path, monkeypatch):
+async def test_review_endpoint_waits_for_business_escalation_decision(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'harvey.db'}"
     monkeypatch.setattr(contracts, "DocumentStore", lambda: DocumentStore(str(tmp_path)))
     monkeypatch.setattr(contracts, "ContractRepository", lambda: ContractRepository(database_url))
@@ -167,18 +185,29 @@ async def test_review_endpoint_adds_escalation_metadata(tmp_path, monkeypatch):
             contract_text="Supplier accepts unlimited liability.",
             contract_type="litigation",
             vendor="ACME GmbH",
-            effective_start_date=date(2026, 1, 1),
-            effective_end_date=date(2026, 12, 31),
+            effective_date=date(2026, 1, 1),
         )
     )
 
-    assert payload["metadata"]["escalation_id"].startswith("esc-")
-    assert payload["metadata"]["escalation_status"] == "pending_legal"
+    assert "escalation_id" not in payload["metadata"]
+    assert payload["metadata"]["business_status"] == "needs_revision"
+    assert payload["metadata"]["escalation_available"] is True
+    assert EscalationRepository(database_url).list_escalations() == []
 
-    escalation = EscalationRepository(database_url).get_escalation(payload["metadata"]["escalation_id"])
+    escalation = await contracts.escalate_contract_version(
+        payload["contract_id"],
+        payload["version_number"],
+        contracts.BusinessEscalationRequest(
+            reason="Business cannot accept the AI suggested liability cap.",
+            requested_by="business-user",
+        ),
+    )
+
+    assert escalation["status"] == "pending_legal"
     assert escalation["version_id"] == payload["version_id"]
     assert escalation["version_number"] == payload["version_number"]
     assert escalation["source_agents"] == ["playbook_checker"]
+    assert escalation["review_result"]["metadata"]["business_escalation_requested_by"] == "business-user"
 
 
 def _escalating_result() -> AgentResult:

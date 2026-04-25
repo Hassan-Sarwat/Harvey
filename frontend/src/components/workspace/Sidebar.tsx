@@ -24,7 +24,7 @@ export const WorkspaceSidebar = ({
 
   useEffect(() => {
     let active = true;
-    Promise.all([listEscalations(), getDashboardMetrics()])
+    Promise.all([listEscalations("pending_legal"), getDashboardMetrics()])
       .then(([escalations, metrics]) => {
         if (!active) return;
         setCounts({

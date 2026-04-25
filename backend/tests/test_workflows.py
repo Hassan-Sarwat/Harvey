@@ -21,3 +21,21 @@ async def test_legal_qa_workflow_returns_company_and_legal_basis():
     assert result.company_basis
     assert result.legal_basis
     assert result.escalate is True
+
+
+async def test_legal_qa_workflow_references_specific_internal_playbook_rule():
+    class StubLegalDataHub:
+        async def search_evidence(self, query: str, domain: str = "general") -> list[dict[str, str]]:
+            return [{"source": "Otto Schmidt / Legal Data Hub", "citation": "GDPR Art. 12-22"}]
+
+    result = await LegalQAWorkflow(legal_data_hub=StubLegalDataHub()).run(
+        LegalQARequest(question="Can a supplier waive GDPR data subject rights?", contract_type="data_protection")
+    )
+
+    assert result.company_basis[0] == {
+        "source": "BMW mock playbook CSV: data_protection",
+        "citation": "DP-003 - Data subject rights cannot be waived",
+        "quote": "No clause may waive statutory data subject rights.",
+        "severity": "blocker",
+        "approved_fix": "Nothing in this Agreement limits rights available to data subjects under applicable data protection law.",
+    }

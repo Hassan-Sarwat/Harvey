@@ -10,10 +10,11 @@ Request:
   "contract_text": "string",
   "contract_type": "data_protection",
   "vendor": "ACME GmbH",
-  "effective_start_date": "2026-01-01",
-  "effective_end_date": "2026-12-31"
+  "effective_date": "2026-01-01"
 }
 ```
+
+`contract_type` is optional. If omitted or blank, the backend infers `data_protection`, `litigation`, or `general` from the contract text.
 
 Response:
 
@@ -30,15 +31,17 @@ Response:
   "confidence": 0.0,
   "requires_escalation": false,
   "metadata": {
-    "escalation_id": "esc-abc123",
-    "escalation_status": "pending_legal"
+    "business_status": "accepted",
+    "escalation_available": false,
+    "recognized_contract_type": "data_protection",
+    "contract_type_source": "ai_inferred"
   }
 }
 ```
 
-Contracts are unique by `contract_type`, `vendor`, `effective_start_date`, and `effective_end_date`.
+Contracts are unique by recognized `contract_type`, `vendor`, and `effective_date`.
 Re-reviewing the same identity creates a new version under the existing `contract_id`.
-Escalation metadata is present only when `requires_escalation` is true.
+Review does not create a legal ticket automatically. If `metadata.business_status` is `needs_revision`, the business user should review the suggested edits and upload a revised version. If the business user declines or cannot obtain the changes, call `POST /contracts/{contract_id}/versions/{version_number}/escalate`.
 
 ## Playbook Upload
 `POST /contracts/playbooks`
@@ -71,10 +74,9 @@ Response:
 Request: `multipart/form-data`
 
 - `file`: contract document, including PDF, Word, Excel, or text formats.
-- `contract_type`: required contract type such as `data_protection`.
+- `contract_type`: optional contract type such as `data_protection`; omitted values are inferred from the extracted text.
 - `vendor`: required vendor name.
-- `effective_start_date`: required ISO date, using the contract effective start date.
-- `effective_end_date`: required ISO date, using the contract effective end date.
+- `effective_date`: required ISO date.
 - `playbook_id`: optional uploaded playbook identifier returned by `POST /contracts/playbooks`.
 
 Response: same review shape as `POST /contracts/review`, with extra metadata:
@@ -94,6 +96,10 @@ Response: same review shape as `POST /contracts/review`, with extra metadata:
     },
     "review_storage_path": "storage/contracts/contract-abc123/versions/v2/review.json",
     "playbook_document_count": 1,
+    "business_status": "needs_revision",
+    "escalation_available": true,
+    "recognized_contract_type": "data_protection",
+    "contract_type_source": "user_provided",
     "agent_results": [
       {
         "agent_name": "playbook_checker",
@@ -120,8 +126,7 @@ Response:
       "version_number": 1,
       "contract_type": "data_protection",
       "vendor": "ACME GmbH",
-      "effective_start_date": "2026-01-01",
-      "effective_end_date": "2026-12-31",
+      "effective_date": "2026-01-01",
       "contract_document": {},
       "ai_suggestions": []
     }
@@ -130,6 +135,21 @@ Response:
 ```
 
 `GET /contracts/{contract_id}/versions/{version_number}` returns the same version metadata plus the full stored `review_result`.
+
+`POST /contracts/{contract_id}/versions/{version_number}/escalate`
+
+Creates a legal ticket only after the business user declines or cannot obtain the suggested edits.
+
+Request:
+
+```json
+{
+  "reason": "Business cannot accept the suggested liability cap.",
+  "requested_by": "business-user"
+}
+```
+
+Response: same shape as `GET /escalations/{escalation_id}` with `status: "pending_legal"`.
 
 ## Escalations
 `GET /escalations`
@@ -145,11 +165,13 @@ Response:
   "items": [
     {
       "id": "esc-abc123",
+      "ticket_id": "TCK-000123",
       "contract_id": "contract-abc123",
       "version_id": "version-def456",
       "version_number": 2,
       "status": "pending_legal",
       "reason": "Unlimited liability exceeds BMW default",
+      "highest_severity": "blocker",
       "source_agents": ["playbook_checker"],
       "source_finding_ids": ["unlimited-liability"],
       "next_owner": "legal"
@@ -158,7 +180,7 @@ Response:
 }
 ```
 
-`GET /escalations/{escalation_id}` returns the same fields plus the full stored `review_result`, `ai_suggestions`, legal decision fields, fix suggestions, timeline, the stored `contract_text`, source `agent_outputs`, and normalized trigger annotations:
+`ticket_id` is the human-facing legal ticket identifier shown in the escalation queue. `GET /escalations/{escalation_id}` returns the same fields plus the full stored `review_result`, `ai_suggestions`, legal decision fields, fix suggestions, timeline, the stored `contract_text`, source `agent_outputs`, and normalized trigger annotations:
 
 ```json
 {

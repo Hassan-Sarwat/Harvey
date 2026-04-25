@@ -9,7 +9,7 @@ import { DashboardView } from "@/components/workspace/DashboardView";
 const titles: Record<WorkspaceView, { title: string; sub: string }> = {
   review: { title: "Review Contract", sub: "Upload or paste a contract for backend playbook review" },
   qa: { title: "Legal Q&A", sub: "Ask about GDPR, BDSG, legal evidence, or BMW playbook" },
-  escalations: { title: "Escalations", sub: "Legal review queue with context, highlights, and decisions" },
+  escalations: { title: "Escalations", sub: "Pending legal tickets with contract highlights, AI flags, and decisions" },
   dashboard: { title: "Dashboard", sub: "Backend metrics across reviews and legal outcomes" },
 };
 

@@ -25,9 +25,12 @@ type ChatMessage = {
   text: string;
 };
 
-type TextSegment = {
+export type TextSegment = {
   text: string;
+  start: number;
+  end: number;
   annotation?: TriggerAnnotation;
+  showMarker?: boolean;
 };
 
 export const EscalationsView = () => {
@@ -45,7 +48,7 @@ export const EscalationsView = () => {
   const [decisionLoading, setDecisionLoading] = useState(false);
 
   const refreshItems = useCallback(async () => {
-    const payload = await listEscalations();
+    const payload = await listEscalations("pending_legal");
     setItems(payload.items);
     setSelectedId((current) => {
       if (current && payload.items.some((item) => item.id === current)) {
@@ -173,9 +176,9 @@ export const EscalationsView = () => {
           <div className="h-16 w-16 mx-auto rounded-2xl bg-warning/10 border border-warning/30 grid place-items-center mb-5">
             <AlertTriangle className="h-7 w-7 text-warning" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">No escalations yet</h2>
+          <h2 className="text-2xl font-bold mb-2">No pending tickets</h2>
           <p className="text-muted-foreground">
-            Run a contract review. High-risk contracts that require legal judgment will appear here with context and highlights.
+            No contracts are currently waiting for legal. Pending ticketed escalations will appear here with context and highlights.
           </p>
           {error && <p className="text-sm text-destructive mt-4">{error}</p>}
         </div>
@@ -184,7 +187,7 @@ export const EscalationsView = () => {
   }
 
   return (
-    <div className="grid lg:grid-cols-[300px_minmax(0,1fr)_340px] h-full overflow-hidden">
+    <div className="grid lg:grid-cols-[320px_minmax(0,1fr)_380px] h-full overflow-hidden">
       <EscalationQueue items={items} selectedId={selectedId} onSelect={setSelectedId} />
 
       <div className="overflow-y-auto border-r border-border/60">
@@ -226,7 +229,7 @@ const EscalationQueue = ({
 }) => (
   <div className="border-r border-border/60 overflow-y-auto bg-card/30">
     <div className="px-5 py-4 border-b border-border/60">
-      <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">Legal Queue</div>
+      <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">Pending Tickets</div>
       <div className="text-2xl font-bold mt-0.5">{items.length}</div>
     </div>
     <div className="divide-y divide-border/40">
@@ -241,12 +244,14 @@ const EscalationQueue = ({
         >
           <div className="flex items-center gap-2 mb-1.5">
             <StatusPill status={item.status} />
+            <SeverityPill severity={item.highest_severity} />
             {item.next_owner && (
               <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground">
                 {item.next_owner}
               </span>
             )}
           </div>
+          <div className="text-base font-semibold mb-1">{item.ticket_id}</div>
           <div className="text-sm font-medium line-clamp-2 flex items-start gap-1.5">
             <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
             {item.reason}
@@ -266,21 +271,24 @@ const EscalationQueue = ({
 );
 
 const EscalationDetailView = ({ detail }: { detail: EscalationDetail }) => {
-  const highestSeverity = getHighestSeverity(detail.trigger_annotations);
+  const highestSeverity = detail.highest_severity ?? getHighestSeverity(detail.trigger_annotations);
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-8">
+    <div className="max-w-5xl mx-auto px-6 py-6">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
           <div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold mb-1">
-              Escalation
+              Legal Ticket
             </div>
             <h1 className="text-2xl font-bold flex items-start gap-2">
               <Scale className="h-5 w-5 text-primary mt-1 shrink-0" />
-              {detail.reason}
+              {detail.ticket_id}
             </h1>
             <div className="text-sm text-muted-foreground mt-1">
+              {detail.reason}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1 font-mono">
               {detail.contract_id}
               {detail.version_number ? ` / version ${detail.version_number}` : ""} - {formatDate(detail.created_at)}
             </div>
@@ -292,7 +300,6 @@ const EscalationDetailView = ({ detail }: { detail: EscalationDetail }) => {
         </div>
 
         <HighlightedContract detail={detail} />
-        <AgentFindings detail={detail} />
       </motion.div>
     </div>
   );
@@ -303,25 +310,43 @@ const HighlightedContract = ({ detail }: { detail: EscalationDetail }) => {
     () => buildTextSegments(detail.contract_text, detail.trigger_annotations),
     [detail.contract_text, detail.trigger_annotations],
   );
+  const annotationMarkers = useMemo(() => buildAnnotationMarkerMap(detail.trigger_annotations), [detail.trigger_annotations]);
 
   return (
-    <section className="rounded-2xl border border-border/60 bg-card/40 shadow-card overflow-hidden mb-6">
+    <section className="rounded-lg border border-border/60 bg-card/40 shadow-card overflow-hidden">
       <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">
-          Source document with highlights
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">
+            Contract Viewer
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">Extracted text preview with AI flags overlaid.</div>
         </div>
         <SeverityLegend />
       </div>
       {detail.contract_text ? (
-        <pre className="px-6 py-6 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-foreground/90 max-h-[560px] overflow-y-auto">
-          {segments.map((segment, index) =>
-            segment.annotation ? (
-              <HighlightedSpan key={`${segment.annotation.id}-${index}`} annotation={segment.annotation} text={segment.text} />
-            ) : (
-              <span key={`text-${index}`}>{segment.text}</span>
-            ),
-          )}
-        </pre>
+        <div className="bg-slate-300/10 px-4 py-5 sm:px-6 max-h-[calc(100vh-190px)] overflow-y-auto">
+          <article className="mx-auto min-h-[760px] max-w-[820px] border border-slate-300 bg-slate-50 px-8 py-9 text-slate-950 shadow-2xl sm:px-12">
+            <div className="mb-6 flex items-center justify-between border-b border-slate-300 pb-3 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              <span>{detail.ticket_id}</span>
+              <span>{detail.version_number ? `Version ${detail.version_number}` : "Unversioned"}</span>
+            </div>
+            <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-950">
+              {segments.map((segment, index) =>
+                segment.annotation ? (
+                  <HighlightedSpan
+                    key={`${segment.annotation.id}-${segment.start}-${index}`}
+                    annotation={segment.annotation}
+                    marker={annotationMarkers.get(segment.annotation.id)}
+                    showMarker={segment.showMarker}
+                    text={segment.text}
+                  />
+                ) : (
+                  <span key={`text-${segment.start}-${index}`}>{segment.text}</span>
+                ),
+              )}
+            </pre>
+          </article>
+        </div>
       ) : (
         <div className="p-6 text-sm text-muted-foreground">Contract text was not stored for this escalation.</div>
       )}
@@ -329,57 +354,75 @@ const HighlightedContract = ({ detail }: { detail: EscalationDetail }) => {
   );
 };
 
-const HighlightedSpan = ({ annotation, text }: { annotation: TriggerAnnotation; text: string }) => {
+const HighlightedSpan = ({
+  annotation,
+  marker,
+  showMarker,
+  text,
+}: {
+  annotation: TriggerAnnotation;
+  marker?: number;
+  showMarker?: boolean;
+  text: string;
+}) => {
   const sev = displaySeverity(annotation.severity);
+  const style = documentHighlightStyle(sev);
   return (
     <span
-      className="relative px-1 py-0.5 rounded cursor-help"
-      style={{
-        background: `hsl(var(--severity-${sev}) / 0.18)`,
-        boxShadow: `inset 0 -2px 0 hsl(var(--severity-${sev}) / 0.7)`,
-      }}
+      className="relative rounded px-1 py-0.5 cursor-help"
+      style={style}
       title={`${annotation.title ?? "Trigger"} - ${annotation.severity}`}
     >
       {text}
+      {showMarker && marker && (
+        <sup className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded bg-slate-950 px-1 text-[10px] font-bold leading-none text-white">
+          {marker}
+        </sup>
+      )}
     </span>
   );
 };
 
-const AgentFindings = ({ detail }: { detail: EscalationDetail }) => {
-  const groups = detail.trigger_annotations.reduce<Record<string, TriggerAnnotation[]>>((accumulator, annotation) => {
-    accumulator[annotation.agent_name] = [...(accumulator[annotation.agent_name] ?? []), annotation];
-    return accumulator;
-  }, {});
+const AnnotationPanel = ({ detail }: { detail: EscalationDetail }) => {
+  const annotations = orderAnnotations(detail.trigger_annotations);
+  const markers = buildAnnotationMarkerMap(detail.trigger_annotations);
 
   return (
-    <div className="space-y-4">
-      <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">
-        Agent findings
+    <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
+      <div className="flex items-center gap-2 mb-4">
+        <AlertTriangle className="h-4 w-4 text-primary" />
+        <h2 className="text-sm font-semibold">AI flags</h2>
       </div>
-      {detail.trigger_annotations.length === 0 && (
-        <div className="rounded-2xl border border-border/60 gradient-card p-5 text-sm text-muted-foreground">
-          No trigger annotations were stored for this escalation.
-        </div>
-      )}
-      {Object.entries(groups).map(([agentName, annotations]) => (
-        <section className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card" key={agentName}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{formatAgentName(agentName)}</h2>
-            <span className="text-xs text-muted-foreground">{annotations.length} trigger{annotations.length === 1 ? "" : "s"}</span>
-          </div>
-          <div className="space-y-3">
-            {annotations.map((annotation) => (
-              <article key={annotation.id} className="rounded-xl border border-border/60 bg-background/30 p-4">
+      {annotations.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No trigger annotations were stored for this ticket.</p>
+      ) : (
+        <div className="space-y-3">
+          {annotations.map((annotation) => {
+            const marker = markers.get(annotation.id);
+            const suggestions = annotation.suggestions ?? [];
+            return (
+              <article key={annotation.id} className="rounded-lg border border-border/60 bg-background/30 p-4">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
+                  {marker && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+                      {marker}
+                    </span>
+                  )}
                   <SeverityPill severity={annotation.severity} />
-                  <span className="text-[10px] font-mono text-muted-foreground">{annotation.finding_id}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">{formatAgentName(annotation.agent_name)}</span>
                 </div>
                 <h3 className="text-sm font-semibold mb-1">{annotation.title}</h3>
-                <p className="text-sm text-muted-foreground">{annotation.description}</p>
+                <p className="text-xs text-muted-foreground">{annotation.description}</p>
                 {annotation.text && (
                   <blockquote className="mt-3 border-l-2 border-primary/60 pl-3 text-xs text-foreground/80">
                     {annotation.text}
                   </blockquote>
+                )}
+                {suggestions[0] && (
+                  <div className="mt-3 rounded-lg border border-success/30 bg-success/5 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-success font-semibold mb-1">AI fix</div>
+                    <p className="text-xs text-foreground/90">{suggestions[0].proposed_text}</p>
+                  </div>
                 )}
                 {annotation.ruling && (
                   <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-3">
@@ -391,11 +434,11 @@ const AgentFindings = ({ detail }: { detail: EscalationDetail }) => {
                   </div>
                 )}
               </article>
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 };
 
@@ -432,12 +475,14 @@ const ContextPanel = ({
   return (
     <aside className="overflow-y-auto bg-card/20 p-5 space-y-4">
       {!detail ? (
-        <div className="rounded-2xl border border-border/60 gradient-card p-5 text-sm text-muted-foreground">
-          Select an escalation.
+        <div className="rounded-lg border border-border/60 gradient-card p-5 text-sm text-muted-foreground">
+          Select a pending ticket.
         </div>
       ) : (
         <>
-          <section className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card">
+          <AnnotationPanel detail={detail} />
+
+          <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <FileText className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Suggested fixes</h2>
@@ -458,10 +503,10 @@ const ContextPanel = ({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card">
+          <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <MessageSquare className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">Context chat</h2>
+              <h2 className="text-sm font-semibold">Ask about this contract</h2>
             </div>
             <div className="space-y-2 max-h-64 overflow-y-auto mb-3">
               {chatMessages.length === 0 && <p className="text-sm text-muted-foreground">No messages yet.</p>}
@@ -487,7 +532,7 @@ const ContextPanel = ({
               <textarea
                 value={chatQuestion}
                 onChange={(event) => onQuestionChange(event.target.value)}
-                placeholder="Ask about this escalation..."
+                placeholder="Ask about this contract..."
                 rows={3}
                 className="w-full resize-none rounded-xl border border-border/70 bg-background/40 px-3 py-2 text-xs focus:outline-none focus:border-primary/60"
               />
@@ -503,7 +548,7 @@ const ContextPanel = ({
             </form>
           </section>
 
-          <section className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card">
+          <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <ShieldAlert className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Legal decision</h2>
@@ -605,22 +650,74 @@ const SeverityPill = ({ severity }: { severity: Severity }) => {
 const SeverityLegend = () => (
   <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
     <span className="flex items-center gap-1">
-      <span className="h-2 w-2 rounded-sm" style={{ background: "hsl(var(--severity-high) / 0.4)" }} />
-      High
+      <span className="h-2 w-2 rounded-sm" style={{ background: "hsl(var(--severity-low) / 0.55)" }} />
+      Ambiguous
     </span>
     <span className="flex items-center gap-1">
-      <span className="h-2 w-2 rounded-sm" style={{ background: "hsl(var(--severity-medium) / 0.4)" }} />
+      <span className="h-2 w-2 rounded-sm" style={{ background: "hsl(var(--severity-medium) / 0.55)" }} />
       Medium
     </span>
     <span className="flex items-center gap-1">
-      <span className="h-2 w-2 rounded-sm" style={{ background: "hsl(var(--severity-low) / 0.4)" }} />
-      Low
+      <span className="h-2 w-2 rounded-sm" style={{ background: "hsl(var(--severity-high) / 0.55)" }} />
+      Illegal / high
     </span>
   </div>
 );
 
-function buildTextSegments(contractText: string, annotations: TriggerAnnotation[]): TextSegment[] {
-  const ranges = annotations
+type AnnotationRange = {
+  annotation: TriggerAnnotation;
+  start: number;
+  end: number;
+};
+
+export function buildTextSegments(contractText: string, annotations: TriggerAnnotation[]): TextSegment[] {
+  const ranges = buildAnnotationRanges(contractText, annotations);
+  if (ranges.length === 0) {
+    return [{ text: contractText, start: 0, end: contractText.length }];
+  }
+
+  const boundaries = [...new Set([0, contractText.length, ...ranges.flatMap((range) => [range.start, range.end])])]
+    .filter((boundary) => boundary >= 0 && boundary <= contractText.length)
+    .sort((left, right) => left - right);
+
+  const segments: TextSegment[] = [];
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    if (end <= start) continue;
+
+    const coveringRanges = ranges.filter((range) => range.start < end && range.end > start);
+    const primaryRange = coveringRanges.sort(compareRangePriority)[0];
+    segments.push({
+      text: contractText.slice(start, end),
+      start,
+      end,
+      annotation: primaryRange?.annotation,
+      showMarker: primaryRange ? start === primaryRange.start : false,
+    });
+  }
+
+  return segments.length ? segments : [{ text: contractText, start: 0, end: contractText.length }];
+}
+
+export function orderAnnotations(annotations: TriggerAnnotation[]): TriggerAnnotation[] {
+  return [...annotations].sort((left, right) => {
+    const leftStart = typeof left.start === "number" ? left.start : Number.MAX_SAFE_INTEGER;
+    const rightStart = typeof right.start === "number" ? right.start : Number.MAX_SAFE_INTEGER;
+    return (
+      leftStart - rightStart ||
+      severityWeight(right.severity) - severityWeight(left.severity) ||
+      left.id.localeCompare(right.id)
+    );
+  });
+}
+
+export function buildAnnotationMarkerMap(annotations: TriggerAnnotation[]): Map<string, number> {
+  return new Map(orderAnnotations(annotations).map((annotation, index) => [annotation.id, index + 1]));
+}
+
+function buildAnnotationRanges(contractText: string, annotations: TriggerAnnotation[]): AnnotationRange[] {
+  return annotations
     .filter((annotation) => typeof annotation.start === "number" && typeof annotation.end === "number")
     .map((annotation) => ({
       annotation,
@@ -628,29 +725,34 @@ function buildTextSegments(contractText: string, annotations: TriggerAnnotation[
       end: Math.min(contractText.length, annotation.end ?? 0),
     }))
     .filter((range) => range.end > range.start)
-    .sort((left, right) => left.start - right.start || severityWeight(right.annotation.severity) - severityWeight(left.annotation.severity));
+    .sort((left, right) => left.start - right.start || compareRangePriority(left, right));
+}
 
-  const segments: TextSegment[] = [];
-  let cursor = 0;
+function compareRangePriority(left: AnnotationRange, right: AnnotationRange): number {
+  return (
+    severityWeight(right.annotation.severity) - severityWeight(left.annotation.severity) ||
+    left.start - right.start ||
+    right.end - left.end ||
+    left.annotation.id.localeCompare(right.annotation.id)
+  );
+}
 
-  for (const range of ranges) {
-    if (range.end <= cursor) continue;
-    if (range.start > cursor) {
-      segments.push({ text: contractText.slice(cursor, range.start) });
-    }
-    const start = Math.max(range.start, cursor);
-    segments.push({
-      text: contractText.slice(start, range.end),
-      annotation: range.annotation,
-    });
-    cursor = range.end;
-  }
-
-  if (cursor < contractText.length) {
-    segments.push({ text: contractText.slice(cursor) });
-  }
-
-  return segments.length ? segments : [{ text: contractText }];
+function documentHighlightStyle(severity: ReturnType<typeof displaySeverity>) {
+  const styles = {
+    low: {
+      backgroundColor: "rgba(250, 204, 21, 0.42)",
+      boxShadow: "inset 0 -2px 0 rgba(202, 138, 4, 0.85)",
+    },
+    medium: {
+      backgroundColor: "rgba(251, 146, 60, 0.42)",
+      boxShadow: "inset 0 -2px 0 rgba(234, 88, 12, 0.9)",
+    },
+    high: {
+      backgroundColor: "rgba(248, 113, 113, 0.48)",
+      boxShadow: "inset 0 -2px 0 rgba(220, 38, 38, 0.95)",
+    },
+  } as const;
+  return styles[severity];
 }
 
 function uniqueSuggestions(detail: EscalationDetail): Suggestion[] {

@@ -217,7 +217,9 @@ export const DashboardView = () => {
                         <tr key={item.id}>
                           <td className="px-4 py-3 font-medium max-w-[260px]">
                             <div className="line-clamp-2">{item.reason}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono mt-1">{item.contract_id}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono mt-1">
+                              {item.ticket_id} · {item.contract_id}
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <StatusChip status={item.status} />

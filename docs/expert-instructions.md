@@ -41,7 +41,7 @@ This file assigns work across the four-person team. Each contributor should keep
 ### Acceptance Criteria
 - Demo can be navigated without backend changes by using the current stub endpoints.
 - Legal citations and playbook arguments are visible on review and Q&A screens.
-- Rejected high-risk suggestions visibly trigger escalation.
+- Business refusal of high-risk suggestions visibly triggers escalation.
 - Layout remains usable on laptop screens during the live demo.
 
 ## Legal Expert 1: BMW Mock Playbook and Contract Review Rules

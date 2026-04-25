@@ -6,10 +6,9 @@ type RequestOptions = {
 export type Severity = "info" | "low" | "medium" | "high" | "blocker";
 
 export type ContractIdentity = {
-  contractType: string;
+  contractType?: string;
   vendor: string;
-  effectiveStartDate: string;
-  effectiveEndDate: string;
+  effectiveDate: string;
   playbookId?: string;
 };
 
@@ -68,13 +67,17 @@ export type ReviewViolation = {
 
 export type ReviewAuditResult = {
   contract_summary: string;
-  status: "Approved" | "Escalated" | "Rejected";
+  status: "Approved" | "Escalated" | "NeedsRevision";
   escalation_required: boolean;
+  escalation_created: boolean;
+  can_escalate: boolean;
   violations: ReviewViolation[];
   confidence: number;
   contract_id?: string;
   version_number?: number;
   escalation_id?: string;
+  business_status?: string;
+  recognized_contract_type?: string;
 };
 
 export type LegalQAResponse = {
@@ -114,11 +117,13 @@ export type EscalationStatus = "pending_legal" | "accepted" | "denied";
 
 export type EscalationListItem = {
   id: string;
+  ticket_id: string;
   contract_id: string;
   version_id?: string | null;
   version_number?: number | null;
   status: EscalationStatus;
   reason: string;
+  highest_severity: Severity;
   source_agents: string[];
   source_finding_ids: string[];
   ai_suggestions: Suggestion[];
@@ -184,25 +189,29 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export function reviewContractText(contractText: string, identity: ContractIdentity) {
+  const body: Record<string, unknown> = {
+    contract_text: contractText,
+    vendor: identity.vendor,
+    effective_date: identity.effectiveDate,
+  };
+  if (identity.contractType?.trim()) {
+    body.contract_type = identity.contractType.trim();
+  }
+
   return request<ReviewResponse>("/contracts/review", {
     method: "POST",
-    body: {
-      contract_text: contractText,
-      contract_type: identity.contractType,
-      vendor: identity.vendor,
-      effective_start_date: identity.effectiveStartDate,
-      effective_end_date: identity.effectiveEndDate,
-    },
+    body,
   });
 }
 
 export function reviewContractFile(file: File, identity: ContractIdentity) {
   const body = new FormData();
   body.append("file", file);
-  body.append("contract_type", identity.contractType);
   body.append("vendor", identity.vendor);
-  body.append("effective_start_date", identity.effectiveStartDate);
-  body.append("effective_end_date", identity.effectiveEndDate);
+  body.append("effective_date", identity.effectiveDate);
+  if (identity.contractType?.trim()) {
+    body.append("contract_type", identity.contractType.trim());
+  }
   if (identity.playbookId) {
     body.append("playbook_id", identity.playbookId);
   }
@@ -210,6 +219,17 @@ export function reviewContractFile(file: File, identity: ContractIdentity) {
   return request<ReviewResponse>("/contracts/review/upload", {
     method: "POST",
     body,
+  });
+}
+
+export function escalateContractVersion(
+  contractId: string,
+  versionNumber: number,
+  payload: { reason?: string; requested_by?: string } = {},
+) {
+  return request<EscalationDetail>(`/contracts/${contractId}/versions/${versionNumber}/escalate`, {
+    method: "POST",
+    body: payload,
   });
 }
 
@@ -259,6 +279,10 @@ export function toAuditResult(review: ReviewResponse): ReviewAuditResult {
   const suggestionsByFinding = new Map(review.suggestions.map((suggestion) => [suggestion.finding_id, suggestion]));
   const highestSeverity = review.findings.reduce((highest, finding) => Math.max(highest, severityWeight(finding.severity)), 0);
   const escalationId = typeof review.metadata?.escalation_id === "string" ? review.metadata.escalation_id : undefined;
+  const businessStatus = metadataString(review.metadata, "business_status");
+  const recognizedContractType = metadataString(review.metadata, "recognized_contract_type");
+  const escalationCreated = Boolean(escalationId);
+  const canEscalate = review.requires_escalation && Boolean(review.contract_id && review.version_number) && !escalationCreated;
   const violations = review.findings.map((finding) => {
     const suggestion = suggestionsByFinding.get(finding.id);
     return {
@@ -273,14 +297,22 @@ export function toAuditResult(review: ReviewResponse): ReviewAuditResult {
   });
 
   return {
-    contract_summary: `${review.summary} ${review.contract_id ? `Contract ${review.contract_id}` : ""}`.trim(),
-    status: review.requires_escalation ? "Escalated" : highestSeverity >= severityWeight("high") ? "Rejected" : "Approved",
+    contract_summary: [
+      review.summary,
+      recognizedContractType ? `Recognized type: ${formatContractType(recognizedContractType)}.` : "",
+      review.contract_id ? `Contract ${review.contract_id}` : "",
+    ].filter(Boolean).join(" "),
+    status: escalationCreated ? "Escalated" : review.findings.length || highestSeverity >= severityWeight("high") ? "NeedsRevision" : "Approved",
     escalation_required: review.requires_escalation,
+    escalation_created: escalationCreated,
+    can_escalate: canEscalate,
     violations,
     confidence: review.confidence,
     contract_id: review.contract_id,
     version_number: review.version_number,
     escalation_id: escalationId,
+    business_status: businessStatus,
+    recognized_contract_type: recognizedContractType,
   };
 }
 
@@ -322,6 +354,15 @@ function severityWeight(severity: Severity) {
     blocker: 4,
   };
   return weights[severity];
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function formatContractType(contractType: string) {
+  return contractType.replace(/_/g, " ");
 }
 
 function readErrorMessage(status: number, body: string) {

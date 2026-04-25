@@ -99,7 +99,7 @@ def _answer_escalation_question(escalation: dict[str, Any], question: str) -> tu
     if _asks_about_history(normalized_question):
         timeline = escalation.get("timeline") or []
         answer = (
-            f"Escalation {escalation['id']} is {escalation['status']} for contract {escalation['contract_id']} "
+            f"Ticket {escalation.get('ticket_id', escalation['id'])} is {escalation['status']} for contract {escalation['contract_id']} "
             f"version {escalation.get('version_number') or 'unversioned'}. "
             f"Reason: {escalation['reason']}. "
             f"Timeline: {_timeline_summary(timeline)}"

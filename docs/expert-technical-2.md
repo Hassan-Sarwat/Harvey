@@ -16,5 +16,5 @@
 ## Acceptance Criteria
 - Demo can be navigated without backend changes by using the current stub endpoints.
 - Legal citations and playbook arguments are visible on review and Q&A screens.
-- Rejected high-risk suggestions visibly trigger escalation.
+- Business refusal of high-risk suggestions visibly triggers escalation.
 - Layout remains usable on laptop screens during the live demo.

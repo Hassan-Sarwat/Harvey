@@ -4,7 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, select
+from sqlalchemy import DateTime, Integer, String, inspect, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 from sqlalchemy.types import JSON
 
@@ -27,6 +28,7 @@ class Escalation(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     escalation_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    ticket_id: Mapped[str | None] = mapped_column(String(24), unique=True, index=True, nullable=True)
     contract_id: Mapped[str] = mapped_column(String(64), index=True)
     version_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -52,6 +54,7 @@ class EscalationRepository:
     def __init__(self, database_url: str | None = None) -> None:
         self.engine = _build_engine(database_url or _default_database_url())
         Base.metadata.create_all(self.engine)
+        _ensure_escalation_schema(self.engine)
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False)
 
     def create_from_review(
@@ -62,6 +65,8 @@ class EscalationRepository:
         contract_text: str | None = None,
         version_id: str | None = None,
         version_number: int | None = None,
+        business_reason: str | None = None,
+        requested_by: str | None = None,
     ) -> dict[str, Any] | None:
         if not review_result.requires_escalation:
             return None
@@ -70,13 +75,18 @@ class EscalationRepository:
         stored_review_result = review_result.model_dump(mode="json")
         if contract_text is not None:
             stored_review_result.setdefault("metadata", {})["contract_text"] = contract_text
+        if business_reason:
+            stored_review_result.setdefault("metadata", {})["business_escalation_reason"] = business_reason
+        if requested_by:
+            stored_review_result.setdefault("metadata", {})["business_escalation_requested_by"] = requested_by
         escalation = Escalation(
             escalation_id=f"esc-{uuid4().hex[:12]}",
+            ticket_id=_new_ticket_id(),
             contract_id=contract_id,
             version_id=version_id,
             version_number=version_number,
             status=PENDING_LEGAL,
-            reason=_escalation_reason(review_result),
+            reason=business_reason or _escalation_reason(review_result),
             review_result=stored_review_result,
             source_agents=source_agents,
             source_finding_ids=source_finding_ids,
@@ -84,6 +94,14 @@ class EscalationRepository:
             fix_suggestions=[],
         )
         with self.session_factory() as session:
+            if version_id:
+                existing = session.scalar(
+                    select(Escalation)
+                    .where(Escalation.version_id == version_id)
+                    .order_by(Escalation.created_at.desc())
+                )
+                if existing:
+                    return _escalation_payload(existing, include_review=False)
             session.add(escalation)
             session.commit()
             session.refresh(escalation)
@@ -220,11 +238,13 @@ def _escalation_reason(review_result: AgentResult) -> str:
 def _escalation_payload(escalation: Escalation, *, include_review: bool) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "id": escalation.escalation_id,
+        "ticket_id": escalation.ticket_id or _ticket_id_from_pk(escalation.id),
         "contract_id": escalation.contract_id,
         "version_id": escalation.version_id,
         "version_number": escalation.version_number,
         "status": escalation.status,
         "reason": escalation.reason,
+        "highest_severity": _highest_severity(escalation.review_result),
         "source_agents": escalation.source_agents,
         "source_finding_ids": escalation.source_finding_ids,
         "ai_suggestions": escalation.ai_suggestions,
@@ -244,6 +264,63 @@ def _escalation_payload(escalation: Escalation, *, include_review: bool) -> dict
         payload["trigger_annotations"] = _trigger_annotations(escalation.review_result)
         payload["agent_outputs"] = escalation.review_result.get("metadata", {}).get("agent_results", [])
     return payload
+
+
+def _ensure_escalation_schema(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if "escalations" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("escalations")}
+    with engine.begin() as connection:
+        if "ticket_id" not in columns:
+            connection.execute(text("ALTER TABLE escalations ADD COLUMN ticket_id VARCHAR(24)"))
+
+        rows = connection.execute(
+            text("SELECT id FROM escalations WHERE ticket_id IS NULL OR ticket_id = '' ORDER BY id")
+        ).mappings()
+        for row in rows:
+            connection.execute(
+                text("UPDATE escalations SET ticket_id = :ticket_id WHERE id = :id"),
+                {"ticket_id": _ticket_id_from_pk(int(row["id"])), "id": row["id"]},
+            )
+
+
+def _new_ticket_id() -> str:
+    return f"TCK-{uuid4().hex[:8].upper()}"
+
+
+def _ticket_id_from_pk(pk: int) -> str:
+    return f"TCK-{pk:06d}"
+
+
+def _highest_severity(review_result: dict[str, Any]) -> str:
+    severities: list[str] = []
+    for finding in review_result.get("findings") or []:
+        severity = finding.get("severity")
+        if isinstance(severity, str):
+            severities.append(severity)
+
+    for agent_result in review_result.get("metadata", {}).get("agent_results") or []:
+        for finding in agent_result.get("findings") or []:
+            severity = finding.get("severity")
+            if isinstance(severity, str):
+                severities.append(severity)
+
+    if not severities:
+        return "info"
+    return max(severities, key=_severity_weight)
+
+
+def _severity_weight(severity: str) -> int:
+    weights = {
+        "info": 0,
+        "low": 1,
+        "medium": 2,
+        "high": 3,
+        "blocker": 4,
+    }
+    return weights.get(severity, 0)
 
 
 def _timeline(escalation: Escalation) -> list[dict[str, str | None]]:

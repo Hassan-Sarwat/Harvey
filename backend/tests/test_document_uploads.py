@@ -68,16 +68,14 @@ async def test_reupload_same_identity_creates_contract_version_history(tmp_path,
     first = await contracts.review_uploaded_contract_by_identity(
         contract_type="data_protection",
         vendor="ACME GmbH",
-        effective_start_date=date(2026, 1, 1),
-        effective_end_date=date(2026, 12, 31),
+        effective_date=date(2026, 1, 1),
         playbook_id=None,
         file=_upload_file("supplier-dpa-v1.pdf", b"BMW supplier processes personal data."),
     )
     second = await contracts.review_uploaded_contract_by_identity(
         contract_type=" data_protection ",
         vendor=" acme gmbh ",
-        effective_start_date=date(2026, 1, 1),
-        effective_end_date=date(2026, 12, 31),
+        effective_date=date(2026, 1, 1),
         playbook_id=None,
         file=_upload_file("supplier-dpa-v2.pdf", b"Supplier processes personal data. Supplier accepts unlimited liability."),
     )
@@ -109,8 +107,7 @@ async def test_changed_contract_identity_creates_new_contract(tmp_path, monkeypa
             contract_text="BMW supplier processes personal data.",
             contract_type="data_protection",
             vendor="ACME GmbH",
-            effective_start_date=date(2026, 1, 1),
-            effective_end_date=date(2026, 12, 31),
+            effective_date=date(2026, 1, 1),
         )
     )
     second = await contracts.review_contract_by_identity(
@@ -118,8 +115,7 @@ async def test_changed_contract_identity_creates_new_contract(tmp_path, monkeypa
             contract_text="BMW supplier processes personal data.",
             contract_type="data_protection",
             vendor="Different GmbH",
-            effective_start_date=date(2026, 1, 1),
-            effective_end_date=date(2026, 12, 31),
+            effective_date=date(2026, 1, 1),
         )
     )
 
@@ -127,6 +123,59 @@ async def test_changed_contract_identity_creates_new_contract(tmp_path, monkeypa
     assert first["version_number"] == 1
     assert second["version_number"] == 1
     assert second["is_new_contract"] is True
+
+
+async def test_contract_type_is_inferred_when_not_supplied(tmp_path, monkeypatch):
+    monkeypatch.setattr(contracts, "DocumentStore", lambda: DocumentStore(str(tmp_path)))
+    monkeypatch.setattr(contracts, "ContractRepository", lambda: ContractRepository(f"sqlite:///{tmp_path / 'harvey.db'}"))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    payload = await contracts.review_contract_by_identity(
+        contracts.ContractReviewRequest(
+            contract_text="Effective Date: 1 January 2026. BMW is controller and Supplier is processor of personal data under GDPR.",
+            vendor="ACME GmbH",
+            effective_date=date(2026, 1, 1),
+        )
+    )
+
+    assert payload["metadata"]["recognized_contract_type"] == "data_protection"
+    assert payload["metadata"]["contract_type_source"] == "ai_inferred"
+
+    history = await contracts.list_contract_versions(payload["contract_id"])
+    assert history["versions"][0]["contract_type"] == "data_protection"
+    assert history["versions"][0]["effective_date"] == "2026-01-01"
+
+
+async def test_revised_contract_version_can_be_accepted_without_legal_ticket(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'harvey.db'}"
+    monkeypatch.setattr(contracts, "DocumentStore", lambda: DocumentStore(str(tmp_path)))
+    monkeypatch.setattr(contracts, "ContractRepository", lambda: ContractRepository(database_url))
+    monkeypatch.setattr(contracts, "EscalationRepository", lambda: EscalationRepository(database_url))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    first = await contracts.review_contract_by_identity(
+        contracts.ContractReviewRequest(
+            contract_text="Effective Date: 1 January 2026. BMW supplier accepts unlimited liability.",
+            contract_type="litigation",
+            vendor="ACME GmbH",
+            effective_date=date(2026, 1, 1),
+        )
+    )
+    second = await contracts.review_contract_by_identity(
+        contracts.ContractReviewRequest(
+            contract_text="Effective Date: 1 January 2026. BMW supplier liability is capped at 100 percent of annual fees.",
+            contract_type="litigation",
+            vendor="ACME GmbH",
+            effective_date=date(2026, 1, 1),
+        )
+    )
+
+    assert first["contract_id"] == second["contract_id"]
+    assert first["metadata"]["business_status"] == "needs_revision"
+    assert second["version_number"] == 2
+    assert second["metadata"]["business_status"] == "accepted"
+    assert second["requires_escalation"] is False
+    assert EscalationRepository(database_url).list_escalations() == []
 
 
 def _upload_file(filename: str, content: bytes) -> UploadFile:

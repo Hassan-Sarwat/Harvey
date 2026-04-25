@@ -108,6 +108,15 @@ class DocumentStore:
         review_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return review_path
 
+    def load_contract_text(self, contract_document: dict[str, Any]) -> str:
+        extracted_text_path = contract_document.get("extracted_text_path")
+        if not extracted_text_path:
+            return ""
+        text_path = Path(str(extracted_text_path))
+        if not text_path.exists() or not text_path.is_file():
+            return ""
+        return text_path.read_text(encoding="utf-8")
+
     def _append_manifest(self, manifest_path: Path, document: dict[str, Any]) -> None:
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         if manifest_path.exists():

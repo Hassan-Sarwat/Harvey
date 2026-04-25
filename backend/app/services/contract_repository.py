@@ -80,15 +80,15 @@ class ContractIdentity:
         *,
         contract_type: str,
         vendor: str,
-        effective_start_date: date,
-        effective_end_date: date,
+        effective_date: date,
     ) -> None:
         self.contract_type = contract_type.strip()
         self.vendor = vendor.strip()
         self.normalized_contract_type = _normalize(contract_type)
         self.normalized_vendor = _normalize(vendor)
-        self.effective_start_date = effective_start_date
-        self.effective_end_date = effective_end_date
+        self.effective_date = effective_date
+        self.effective_start_date = effective_date
+        self.effective_end_date = effective_date
 
 
 class ContractRepository:
@@ -194,8 +194,7 @@ def _version_payload(contract: Contract, version: ContractVersion, *, include_re
         "version_number": version.version_number,
         "contract_type": contract.contract_type,
         "vendor": contract.vendor,
-        "effective_start_date": contract.effective_start_date.isoformat(),
-        "effective_end_date": contract.effective_end_date.isoformat(),
+        "effective_date": contract.effective_start_date.isoformat(),
         "contract_document": {
             "filename": version.filename,
             "stored_path": version.stored_path,
