@@ -13,6 +13,7 @@ class LegalQARequest(BaseModel):
 
 
 class LegalQAResponse(BaseModel):
+    domain: str
     summary: str
     recommendation: str
     company_basis: list[dict]
@@ -32,6 +33,7 @@ class LegalQAWorkflow:
         legal_basis = [_normalize_legal_basis(item) for item in legal_basis[:3]]
         escalate = _requires_escalation(request.question, selected_rows, matched_playbook_terms)
         return LegalQAResponse(
+            domain=domain,
             summary=_summary(domain, selected_rows, legal_basis, matched_playbook_terms),
             recommendation=_recommendation(selected_rows, escalate),
             company_basis=company_basis,
@@ -41,8 +43,9 @@ class LegalQAWorkflow:
 
 
 def _infer_domain(request: LegalQARequest) -> str:
-    if request.contract_type:
-        return request.contract_type.strip() or "data_protection"
+    supplied = (request.contract_type or "").strip()
+    if supplied and supplied != "general":
+        return supplied
     question = request.question.lower()
     litigation_terms = ("litigation", "settlement", "liability", "indemnity", "court", "arbitration", "legal hold")
     if any(term in question for term in litigation_terms):
@@ -137,14 +140,21 @@ def _summary(
         rule = rows[0]
         severity = (rule.get("severity") or "medium").lower()
         return (
-            f"BMW's {domain_label} playbook treats this as a {severity} issue under "
+            f"I checked the {playbook_source_label(domain)}. It treats this as a {severity} issue under "
             f"{rule.get('id', 'the cited rule')} ({rule.get('title', 'playbook rule')}). "
-            f"The legal basis below is supporting evidence, not a substitute for legal sign-off."
+            f"German/EU legal evidence is cited below as support, not as a substitute for legal sign-off."
+        )
+    if rows:
+        rule = rows[0]
+        return (
+            f"I checked the {playbook_source_label(domain)} and did not find an exact trigger match. "
+            f"The closest playbook position is {rule.get('id', 'the cited rule')} "
+            f"({rule.get('title', 'playbook rule')}). German/EU legal evidence is cited below as support."
         )
     if legal_basis:
         first = legal_basis[0]
         return (
-            f"The strongest available {domain_label} answer is based on the cited BMW playbook defaults "
+            f"The strongest available {domain_label} answer is based on BMW playbook defaults "
             f"and legal evidence from {first.get('source', 'Legal Data Hub evidence')}."
         )
     return (

@@ -11,3 +11,8 @@ router = APIRouter(prefix="/legal-qa", tags=["legal-qa"])
 async def answer_question(request: LegalQARequest) -> dict:
     response = await LegalQAWorkflow().run(request)
     return response.model_dump()
+
+
+@router.get("/legal-data-hub/status")
+async def legal_data_hub_status() -> dict:
+    return await LegalQAWorkflow().legal_data_hub.status()

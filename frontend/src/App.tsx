@@ -29,9 +29,9 @@ import {
   UploadCloud,
   Users
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { analyzeMatter, dropHistoryItem, getConfig, getDashboard, getHistory, getHistoryItem, runDemo } from "./api";
-import type { AgentStep, AppConfig, AskMode, ConfigItem, DashboardMetrics, Finding, HistoryDetail, HistorySummary, RunResult } from "./types";
+import React, { useEffect, useMemo, useState, type ReactNode } from "react";
+import { analyzeMatter, askEscalationQuestion, decideEscalation, dropHistoryItem, getConfig, getDashboard, getEscalation, getHistory, getHistoryItem, listEscalations, runDemo } from "./api";
+import type { AgentMetric, AgentStep, AppConfig, AskMode, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
 
 const emptyConfig: AppConfig = {
   app_name: "BMW Legal Agent Platform",
@@ -181,7 +181,8 @@ function applyAutoRoutingFallback(result: RunResult, wasAutoMode: boolean): RunR
 function App() {
   const [config, setConfig] = useState<AppConfig>(emptyConfig);
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
-  const [activeView, setActiveView] = useState<"ask" | "history" | "dashboard" | "playbook">("ask");
+  const [activeView, setActiveView] = useState<"ask" | "history" | "dashboard" | "playbook" | "escalations">("ask");
+  const [escalationCount, setEscalationCount] = useState(0);
   const [askMode, setAskMode] = useState<AskMode>("general_question");
   const [message, setMessage] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -203,6 +204,7 @@ function App() {
       .catch((err) => setError(err.message));
     getDashboard().then(setDashboard).catch(() => undefined);
     loadHistory().catch(() => undefined);
+    listEscalations("pending_legal").then((data) => setEscalationCount(data.items.length)).catch(() => undefined);
   }, []);
 
   const steps = isRunning ? optimisticSteps : result?.agent_steps ?? [];
@@ -274,13 +276,15 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar activeView={activeView} onChange={setActiveView} />
+      <Sidebar activeView={activeView} onChange={setActiveView} escalationCount={escalationCount} />
       <main className="main">
         <Topbar />
         {activeView === "dashboard" ? (
           <DashboardView dashboard={dashboard} />
         ) : activeView === "playbook" ? (
           <PlaybookView />
+        ) : activeView === "escalations" ? (
+          <EscalationsView />
         ) : activeView === "history" ? (
           <HistoryView
             items={historyItems}
@@ -318,7 +322,7 @@ function App() {
   );
 }
 
-function Sidebar({ activeView, onChange }: { activeView: string; onChange: (view: "ask" | "history" | "dashboard" | "playbook") => void }) {
+function Sidebar({ activeView, onChange, escalationCount }: { activeView: string; onChange: (view: "ask" | "history" | "dashboard" | "playbook" | "escalations") => void; escalationCount: number }) {
   const general = [
     { id: "ask", label: "Ask Donna", icon: MessageSquareText },
     { id: "history", label: "History", icon: HistoryIcon }
@@ -326,7 +330,7 @@ function Sidebar({ activeView, onChange }: { activeView: string; onChange: (view
   const legal = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "playbook", label: "Playbook", icon: BookOpen },
-    { label: "Escalations", icon: AlertTriangle, badge: "3" },
+    { id: "escalations", label: "Escalations", icon: AlertTriangle },
   ] as const;
   const admin = [
     { label: "Settings", icon: Settings }
@@ -355,16 +359,15 @@ function Sidebar({ activeView, onChange }: { activeView: string; onChange: (view
         <span className="nav-section">Legal</span>
         {legal.map((item) => {
           const Icon = item.icon;
-          const id = "id" in item ? item.id : null;
           return (
             <button
               key={item.label}
-              className={id && activeView === id ? "nav-item active" : "nav-item muted"}
-              onClick={id ? () => onChange(id) : undefined}
+              className={activeView === item.id ? "nav-item active" : "nav-item"}
+              onClick={() => onChange(item.id)}
             >
               <Icon size={19} />
               <span>{item.label}</span>
-              {"badge" in item && item.badge ? <b>{item.badge}</b> : null}
+              {item.id === "escalations" && escalationCount > 0 ? <b>{escalationCount}</b> : null}
             </button>
           );
         })}
@@ -1009,20 +1012,89 @@ function HistoryStatus({ item }: { item: HistorySummary | HistoryDetail }) {
 }
 
 function DashboardView({ dashboard }: { dashboard: DashboardMetrics | null }) {
+  const agentMetrics = dashboard?.per_agent_metrics ?? [];
+  const topFalse = dashboard?.top_false_escalation_agent;
+  const topPositive = dashboard?.top_positive_escalation_agent;
+
   return (
     <div className="dashboard-view">
       <div className="page-title">
         <div>
           <p className="eyebrow">Performance dashboard</p>
-          <h1>AI intake performance and playbook drift.</h1>
+          <h1>AI intake performance and agent analytics.</h1>
         </div>
       </div>
+
+      {/* Summary metrics */}
       <div className="metric-grid">
-        <Metric icon={<BarChart3 />} label="Total matters" value={dashboard?.total_runs ?? 0} />
-        <Metric icon={<CheckCircle2 />} label="No escalation" value={dashboard?.auto_cleared ?? 0} />
-        <Metric icon={<AlertTriangle />} label="Legal recommended" value={dashboard?.legal_recommended ?? 0} />
-        <Metric icon={<Gavel />} label="Legal required" value={dashboard?.legal_required ?? 0} />
+        <Metric icon={<BarChart3 />} label="Total escalations" value={dashboard?.total_runs ?? 0} />
+        <Metric icon={<CheckCircle2 />} label="AI approved" value={dashboard?.auto_cleared ?? 0} />
+        <Metric icon={<AlertTriangle />} label="Pending legal" value={dashboard?.legal_recommended ?? 0} />
+        <Metric icon={<Gavel />} label="Denied by legal" value={dashboard?.legal_required ?? 0} />
       </div>
+
+      {/* Callout cards for top agents */}
+      {(topFalse || topPositive) ? (
+        <div className="dashboard-grid">
+          {topFalse ? (
+            <section className="timeline-card">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">Most false escalations</p>
+                  <h2>{topFalse.agent_name.replace(/_/g, " ")}</h2>
+                </div>
+                <span className="status-pill warning">{topFalse.false_escalations} accepted</span>
+              </div>
+              <p className="dash-callout-desc">This agent raised the most escalations that legal accepted (AI was overly cautious).</p>
+            </section>
+          ) : null}
+          {topPositive ? (
+            <section className="timeline-card">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">Most valid escalations</p>
+                  <h2>{topPositive.agent_name.replace(/_/g, " ")}</h2>
+                </div>
+                <span className="status-pill">{topPositive.positive_escalations} denied</span>
+              </div>
+              <p className="dash-callout-desc">This agent raised the most escalations that legal denied (contract had real issues).</p>
+            </section>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Per-agent analytics table */}
+      {agentMetrics.length > 0 ? (
+        <section className="timeline-card">
+          <div className="section-head">
+            <h2>Per-agent performance</h2>
+            <span className="status-pill">False escalation = legal accepted (AI was wrong)</span>
+          </div>
+          <div className="agent-table">
+            <div className="agent-table-head">
+              <span>Agent</span>
+              <span>Total</span>
+              <span>Pending</span>
+              <span>Accepted (false)</span>
+              <span>Denied (valid)</span>
+              <span>False rate</span>
+            </div>
+            {agentMetrics.map((agent) => (
+              <div className="agent-table-row" key={agent.agent_name}>
+                <span className="agent-table-name">{agent.agent_name.replace(/_/g, " ")}</span>
+                <span>{agent.total}</span>
+                <span>{agent.pending}</span>
+                <span>{agent.accepted}</span>
+                <span>{agent.denied}</span>
+                <span className={agent.false_escalation_rate > 0.5 ? "agent-rate high" : agent.false_escalation_rate > 0.25 ? "agent-rate medium" : "agent-rate"}>
+                  {Math.round(agent.false_escalation_rate * 100)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <div className="dashboard-grid">
         <section className="timeline-card">
           <div className="section-head">
@@ -1043,7 +1115,7 @@ function DashboardView({ dashboard }: { dashboard: DashboardMetrics | null }) {
         <section className="timeline-card">
           <div className="section-head">
             <h2>Top escalation triggers</h2>
-            <span className="status-pill">{dashboard?.missing_docs_rate ?? 0}% missing-doc rate</span>
+            <span className="status-pill">{dashboard?.missing_docs_rate ?? 0}% denial rate</span>
           </div>
           <div className="trigger-list">
             {(dashboard?.top_triggers ?? []).map((item) => (
@@ -1109,6 +1181,533 @@ function PlaybookView() {
 
 function Confidence({ value }: { value: number }) {
   return <span className="confidence">{Math.round(value * 100)}% confidence</span>;
+}
+
+// ─────────────────────────────────────────────
+// Escalations page
+// ─────────────────────────────────────────────
+
+type ChatMessage = { role: "user" | "assistant"; text: string };
+
+type TextSegment = {
+  text: string;
+  start: number;
+  end: number;
+  annotation?: TriggerAnnotation;
+  showMarker?: boolean;
+};
+
+type AnnotationRange = { annotation: TriggerAnnotation; start: number; end: number };
+
+function severityWeight(severity: Severity): number {
+  return ({ info: 0, low: 1, medium: 2, high: 3, blocker: 4 } as Record<Severity, number>)[severity] ?? 0;
+}
+
+function displaySeverity(severity: Severity): "low" | "medium" | "high" {
+  if (severity === "blocker" || severity === "high") return "high";
+  if (severity === "medium") return "medium";
+  return "low";
+}
+
+function documentHighlightStyle(sev: "low" | "medium" | "high"): React.CSSProperties {
+  const styles = {
+    low: { backgroundColor: "rgba(250,204,21,0.42)", boxShadow: "inset 0 -2px 0 rgba(202,138,4,0.85)" },
+    medium: { backgroundColor: "rgba(251,146,60,0.42)", boxShadow: "inset 0 -2px 0 rgba(234,88,12,0.9)" },
+    high: { backgroundColor: "rgba(248,113,113,0.48)", boxShadow: "inset 0 -2px 0 rgba(220,38,38,0.95)" },
+  } as const;
+  return styles[sev];
+}
+
+function buildAnnotationRanges(contractText: string, annotations: TriggerAnnotation[]): AnnotationRange[] {
+  return annotations
+    .filter((a) => typeof a.start === "number" && typeof a.end === "number")
+    .map((a) => ({ annotation: a, start: Math.max(0, a.start ?? 0), end: Math.min(contractText.length, a.end ?? 0) }))
+    .filter((r) => r.end > r.start);
+}
+
+function compareRangePriority(left: AnnotationRange, right: AnnotationRange): number {
+  return (
+    severityWeight(right.annotation.severity) - severityWeight(left.annotation.severity) ||
+    left.start - right.start ||
+    right.end - left.end
+  );
+}
+
+function buildTextSegments(contractText: string, annotations: TriggerAnnotation[]): TextSegment[] {
+  const ranges = buildAnnotationRanges(contractText, annotations);
+  if (!ranges.length) return [{ text: contractText, start: 0, end: contractText.length }];
+
+  const boundaries = [...new Set([0, contractText.length, ...ranges.flatMap((r) => [r.start, r.end])])]
+    .filter((b) => b >= 0 && b <= contractText.length)
+    .sort((a, b) => a - b);
+
+  const segments: TextSegment[] = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const start = boundaries[i];
+    const end = boundaries[i + 1];
+    if (end <= start) continue;
+    const covering = ranges.filter((r) => r.start < end && r.end > start).sort(compareRangePriority);
+    const primary = covering[0];
+    segments.push({ text: contractText.slice(start, end), start, end, annotation: primary?.annotation, showMarker: primary ? start === primary.start : false });
+  }
+  return segments.length ? segments : [{ text: contractText, start: 0, end: contractText.length }];
+}
+
+function buildAnnotationMarkerMap(annotations: TriggerAnnotation[]): Map<string, number> {
+  const sorted = [...annotations].sort((a, b) => {
+    const as = typeof a.start === "number" ? a.start : Number.MAX_SAFE_INTEGER;
+    const bs = typeof b.start === "number" ? b.start : Number.MAX_SAFE_INTEGER;
+    return as - bs || severityWeight(b.severity) - severityWeight(a.severity);
+  });
+  return new Map(sorted.map((a, i) => [a.id, i + 1]));
+}
+
+function uniqueSuggestions(detail: EscalationDetail): Suggestion[] {
+  const seen = new Set<string>();
+  return [...detail.ai_suggestions, ...detail.trigger_annotations.flatMap((a) => a.suggestions)].filter((s) => {
+    const key = `${s.finding_id}:${s.proposed_text}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function formatEscDate(value: string): string {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+
+function EscSeverityPill({ severity }: { severity: Severity }) {
+  const sev = displaySeverity(severity);
+  const colours = { low: "#ca8a04", medium: "#ea580c", high: "#dc2626" };
+  return (
+    <span className="esc-severity-pill" style={{ color: colours[sev], background: colours[sev] + "22" }}>
+      {severity}
+    </span>
+  );
+}
+
+function EscStatusPill({ status }: { status: EscalationStatus }) {
+  const map: Record<EscalationStatus, { label: string; color: string }> = {
+    pending_legal: { label: "Pending legal", color: "#b45309" },
+    accepted: { label: "Accepted", color: "#16a34a" },
+    denied: { label: "Denied", color: "#dc2626" },
+  };
+  const m = map[status];
+  return (
+    <span className="esc-status-pill" style={{ color: m.color, background: m.color + "22" }}>
+      {m.label}
+    </span>
+  );
+}
+
+function HighlightedSpan({ annotation, marker, showMarker, text }: { annotation: TriggerAnnotation; marker?: number; showMarker?: boolean; text: string }) {
+  const style = documentHighlightStyle(displaySeverity(annotation.severity));
+  return (
+    <span className="esc-highlight-span" style={style} title={`${annotation.title ?? "Trigger"} — ${annotation.severity}`}>
+      {text}
+      {showMarker && marker ? (
+        <sup className="esc-marker">{marker}</sup>
+      ) : null}
+    </span>
+  );
+}
+
+function HighlightedContract({ detail }: { detail: EscalationDetail }) {
+  const segments = useMemo(() => buildTextSegments(detail.contract_text, detail.trigger_annotations), [detail.contract_text, detail.trigger_annotations]);
+  const markerMap = useMemo(() => buildAnnotationMarkerMap(detail.trigger_annotations), [detail.trigger_annotations]);
+
+  return (
+    <div className="esc-contract-card">
+      <div className="esc-contract-header">
+        <div>
+          <p className="eyebrow">Contract Viewer</p>
+          <span className="esc-hint">Extracted text with AI flags overlaid</span>
+        </div>
+        <div className="esc-legend">
+          <span><span className="esc-legend-dot" style={{ background: "rgba(250,204,21,0.7)" }} />Low</span>
+          <span><span className="esc-legend-dot" style={{ background: "rgba(251,146,60,0.7)" }} />Medium</span>
+          <span><span className="esc-legend-dot" style={{ background: "rgba(248,113,113,0.7)" }} />High</span>
+        </div>
+      </div>
+      {detail.contract_text ? (
+        <div className="esc-contract-scroll">
+          <article className="esc-paper">
+            <div className="esc-paper-header">
+              <span>{detail.ticket_id}</span>
+              <span>{detail.version_number ? `Version ${detail.version_number}` : "Unversioned"}</span>
+            </div>
+            <pre className="esc-contract-pre">
+              {segments.map((seg, i) =>
+                seg.annotation ? (
+                  <HighlightedSpan
+                    key={`${seg.annotation.id}-${seg.start}-${i}`}
+                    annotation={seg.annotation}
+                    marker={markerMap.get(seg.annotation.id)}
+                    showMarker={seg.showMarker}
+                    text={seg.text}
+                  />
+                ) : (
+                  <span key={`t-${seg.start}-${i}`}>{seg.text}</span>
+                )
+              )}
+            </pre>
+          </article>
+        </div>
+      ) : (
+        <div className="quiet-box">Contract text was not stored for this escalation.</div>
+      )}
+    </div>
+  );
+}
+
+function AnnotationList({ detail }: { detail: EscalationDetail }) {
+  const markers = useMemo(() => buildAnnotationMarkerMap(detail.trigger_annotations), [detail.trigger_annotations]);
+  const sorted = useMemo(() =>
+    [...detail.trigger_annotations].sort((a, b) => {
+      const as = typeof a.start === "number" ? a.start : Number.MAX_SAFE_INTEGER;
+      const bs = typeof b.start === "number" ? b.start : Number.MAX_SAFE_INTEGER;
+      return as - bs;
+    }),
+    [detail.trigger_annotations]
+  );
+
+  if (!sorted.length) return <div className="quiet-box">No trigger annotations stored.</div>;
+  return (
+    <div className="esc-annotation-list">
+      {sorted.map((ann) => {
+        const marker = markers.get(ann.id);
+        return (
+          <div className="esc-annotation-card" key={ann.id}>
+            <div className="esc-annotation-meta">
+              {marker ? <span className="esc-marker-badge">{marker}</span> : null}
+              <EscSeverityPill severity={ann.severity} />
+              <span className="esc-agent-label">{ann.agent_name.replace(/_/g, " ")}</span>
+            </div>
+            <strong className="esc-annotation-title">{ann.title}</strong>
+            <p className="esc-annotation-desc">{ann.description}</p>
+            {ann.text ? <blockquote className="esc-annotation-quote">{ann.text}</blockquote> : null}
+            {ann.suggestions[0] ? (
+              <div className="esc-fix-box">
+                <span className="esc-fix-label">AI fix</span>
+                <p>{ann.suggestions[0].proposed_text}</p>
+              </div>
+            ) : null}
+            {ann.ruling ? (
+              <div className="esc-ruling-box">
+                <span className="esc-ruling-citation">{ann.ruling.citation}</span>
+                <span className="esc-ruling-source">{ann.ruling.source}</span>
+                <p>{ann.ruling.quote}</p>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EscalationContextPanel({
+  detail,
+  chatMessages,
+  chatQuestion,
+  chatLoading,
+  decisionNotes,
+  fixSuggestions,
+  decisionLoading,
+  onQuestionChange,
+  onSubmitQuestion,
+  onNotesChange,
+  onFixSuggestionsChange,
+  onDecision,
+}: {
+  detail: EscalationDetail | null;
+  chatMessages: ChatMessage[];
+  chatQuestion: string;
+  chatLoading: boolean;
+  decisionNotes: string;
+  fixSuggestions: string;
+  decisionLoading: boolean;
+  onQuestionChange: (v: string) => void;
+  onSubmitQuestion: (e: React.FormEvent) => void;
+  onNotesChange: (v: string) => void;
+  onFixSuggestionsChange: (v: string) => void;
+  onDecision: (d: "accepted" | "denied") => void;
+}) {
+  if (!detail) return <div className="esc-context-panel"><div className="quiet-box">Select a pending ticket.</div></div>;
+  const canDecide = detail.status === "pending_legal";
+  const suggestions = uniqueSuggestions(detail);
+
+  return (
+    <aside className="esc-context-panel">
+      {/* AI flags */}
+      <div className="esc-section">
+        <div className="section-head compact">
+          <h2>AI flags</h2>
+          <span className="counter">{detail.trigger_annotations.length}</span>
+        </div>
+        <AnnotationList detail={detail} />
+      </div>
+
+      {/* Suggested fixes */}
+      {(suggestions.length > 0 || detail.fix_suggestions.length > 0) ? (
+        <div className="esc-section">
+          <div className="section-head compact"><h2>Suggested fixes</h2></div>
+          <div className="esc-annotation-list">
+            {suggestions.map((s) => (
+              <div className="esc-annotation-card" key={`${s.finding_id}-${s.proposed_text}`}>
+                <span className="esc-agent-label">{s.finding_id}</span>
+                <p className="esc-annotation-desc">{s.proposed_text}</p>
+                <p className="esc-annotation-desc" style={{ opacity: 0.7 }}>{s.rationale}</p>
+              </div>
+            ))}
+            {detail.fix_suggestions.map((fix) => (
+              <div className="esc-fix-box" key={fix}>
+                <span className="esc-fix-label">Legal fix</span>
+                <p>{fix}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Chat */}
+      <div className="esc-section">
+        <div className="section-head compact"><h2>Ask about this contract</h2></div>
+        <div className="esc-chat">
+          {chatMessages.length === 0 ? <p className="esc-chat-empty">No messages yet.</p> : null}
+          {chatMessages.map((msg, i) => (
+            <div key={`${msg.role}-${i}`} className={`esc-chat-msg ${msg.role}`}>{msg.text}</div>
+          ))}
+          {chatLoading ? <div className="esc-chat-msg assistant"><Loader2 className="spin" size={14} /> Checking context…</div> : null}
+        </div>
+        <form onSubmit={onSubmitQuestion} className="esc-chat-form">
+          <textarea
+            value={chatQuestion}
+            onChange={(e) => onQuestionChange(e.target.value)}
+            placeholder="Ask about this contract…"
+            rows={3}
+          />
+          <button type="submit" className="primary-button" disabled={chatLoading || !chatQuestion.trim()}>
+            <Send size={15} /> Ask
+          </button>
+        </form>
+      </div>
+
+      {/* Legal decision */}
+      <div className="esc-section">
+        <div className="section-head compact"><h2>Legal decision</h2></div>
+        {!canDecide ? (
+          <div className="quiet-box">
+            Decision recorded as <strong>{detail.status.replace("_", " ")}</strong>
+            {detail.legal_notes ? `: ${detail.legal_notes}` : "."}
+          </div>
+        ) : null}
+        <textarea
+          value={decisionNotes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder="Legal notes…"
+          rows={3}
+          disabled={!canDecide || decisionLoading}
+          className="esc-notes-input"
+        />
+        <textarea
+          value={fixSuggestions}
+          onChange={(e) => onFixSuggestionsChange(e.target.value)}
+          placeholder="Fix suggestions for denied escalations, one per line…"
+          rows={4}
+          disabled={!canDecide || decisionLoading}
+          className="esc-notes-input"
+        />
+        <div className="esc-decision-row">
+          <button
+            className="secondary-button esc-accept-btn"
+            disabled={!canDecide || decisionLoading}
+            onClick={() => onDecision("accepted")}
+          >
+            <CheckCircle2 size={15} /> Accept
+          </button>
+          <button
+            className="secondary-button esc-deny-btn"
+            disabled={!canDecide || decisionLoading}
+            onClick={() => onDecision("denied")}
+          >
+            <AlertTriangle size={15} /> Deny
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function EscalationsView() {
+  const [items, setItems] = useState<EscalationListItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<EscalationDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [chatQuestion, setChatQuestion] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [decisionNotes, setDecisionNotes] = useState("");
+  const [fixSuggestions, setFixSuggestions] = useState("");
+  const [decisionLoading, setDecisionLoading] = useState(false);
+
+  const refreshItems = async () => {
+    const data = await listEscalations();
+    setItems(data.items);
+    setSelectedId((cur) => (cur && data.items.some((i) => i.id === cur) ? cur : data.items[0]?.id ?? null));
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    refreshItems().then(() => setError(null)).catch(() => setError("Could not load escalations.")).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) { setDetail(null); return; }
+    setDetailLoading(true);
+    setChatMessages([]);
+    setDecisionNotes("");
+    setFixSuggestions("");
+    getEscalation(selectedId)
+      .then((d) => { setDetail(d); setError(null); })
+      .catch(() => setError("Could not load escalation detail."))
+      .finally(() => setDetailLoading(false));
+  }, [selectedId]);
+
+  const submitQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = chatQuestion.trim();
+    if (!detail || !q || chatLoading) return;
+    setChatQuestion("");
+    setChatLoading(true);
+    setChatMessages((msgs) => [...msgs, { role: "user", text: q }]);
+    try {
+      const resp = await askEscalationQuestion(detail.id, q);
+      setChatMessages((msgs) => [...msgs, { role: "assistant", text: resp.answer }]);
+    } catch {
+      setChatMessages((msgs) => [...msgs, { role: "assistant", text: "Could not answer from the escalation context." }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const submitDecision = async (decision: "accepted" | "denied") => {
+    if (!detail || decisionLoading) return;
+    const fixes = fixSuggestions.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (decision === "denied" && !fixes.length) {
+      setError("Denied escalations require at least one legal fix suggestion.");
+      return;
+    }
+    setDecisionLoading(true);
+    setError(null);
+    try {
+      const updated = await decideEscalation(detail.id, { decision, notes: decisionNotes.trim() || undefined, fix_suggestions: fixes, decided_by: "legal-team" });
+      setDetail(updated);
+      await refreshItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save legal decision.");
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="workspace">
+        <div className="empty-state">
+          <Loader2 className="spin" size={24} />
+          <div><strong>Loading escalations…</strong></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace esc-workspace">
+      <div className="page-title">
+        <div>
+          <p className="eyebrow">Legal Escalations</p>
+          <h1>Review flagged contracts, inspect highlights, and record legal decisions.</h1>
+        </div>
+      </div>
+      {error ? <div className="error-box">{error}</div> : null}
+      {items.length === 0 ? (
+        <div className="empty-state">
+          <AlertTriangle size={27} />
+          <div>
+            <strong>No pending escalations</strong>
+            <p>Run a final-version contract review to generate escalation tickets.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="esc-shell">
+          {/* Left: queue */}
+          <div className="esc-queue">
+            <div className="esc-queue-header">
+              <span className="eyebrow">Pending tickets</span>
+              <strong className="esc-queue-count">{items.length}</strong>
+            </div>
+            {items.map((item) => (
+              <button
+                key={item.id}
+                className={selectedId === item.id ? "esc-queue-item active" : "esc-queue-item"}
+                onClick={() => setSelectedId(item.id)}
+              >
+                <div className="esc-queue-item-pills">
+                  <EscStatusPill status={item.status} />
+                  <EscSeverityPill severity={item.highest_severity} />
+                </div>
+                <strong className="esc-queue-ticket">{item.ticket_id}</strong>
+                <p className="esc-queue-reason">{item.reason}</p>
+                <span className="esc-queue-meta">{formatEscDate(item.created_at)}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Centre: contract viewer */}
+          <div className="esc-center">
+            {detailLoading ? (
+              <div className="empty-state"><Loader2 className="spin" size={24} /></div>
+            ) : detail ? (
+              <>
+                <div className="esc-detail-head">
+                  <div>
+                    <p className="eyebrow">Legal Ticket</p>
+                    <h2 className="esc-ticket-id">{detail.ticket_id}</h2>
+                    <p className="esc-ticket-reason">{detail.reason}</p>
+                  </div>
+                  <EscStatusPill status={detail.status} />
+                </div>
+                <HighlightedContract detail={detail} />
+              </>
+            ) : (
+              <div className="empty-state"><HistoryIcon size={24} /><div><strong>Select a ticket</strong></div></div>
+            )}
+          </div>
+
+          {/* Right: context panel */}
+          <EscalationContextPanel
+            detail={detail}
+            chatMessages={chatMessages}
+            chatQuestion={chatQuestion}
+            chatLoading={chatLoading}
+            decisionNotes={decisionNotes}
+            fixSuggestions={fixSuggestions}
+            decisionLoading={decisionLoading}
+            onQuestionChange={setChatQuestion}
+            onSubmitQuestion={submitQuestion}
+            onNotesChange={setDecisionNotes}
+            onFixSuggestionsChange={setFixSuggestions}
+            onDecision={submitDecision}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Band({ band, severity }: { band: Finding["band"]; severity: Finding["severity"] }) {

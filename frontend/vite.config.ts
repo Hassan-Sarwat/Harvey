@@ -6,7 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:8000"
+      "/api": "http://localhost:8000",
+      "/escalations": "http://localhost:8000",
+      "/legal-qa": "http://localhost:8000",
+      "/contracts": "http://localhost:8000"
     }
   }
 });

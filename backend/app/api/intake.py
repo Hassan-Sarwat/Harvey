@@ -93,25 +93,33 @@ async def config() -> dict[str, Any]:
 @router.get("/dashboard")
 async def dashboard() -> dict[str, Any]:
     repository = EscalationRepository()
-    escalation_metrics = repository.escalation_metrics()
+    metrics = repository.escalation_metrics()
     escalations = repository.list_escalations()
     trigger_counts = Counter(finding_id.replace("-", " ") for item in escalations for finding_id in item["source_finding_ids"])
 
+    total = metrics["total_escalations"]
+    accepted = metrics["accepted_escalations"]
+    denied = metrics["denied_escalations"]
+    pending = metrics["pending_escalations"]
+
     return {
-        "total_runs": max(escalation_metrics["total_escalations"], len(escalations)),
-        "auto_cleared": 3,
-        "legal_recommended": escalation_metrics["pending_escalations"],
-        "legal_required": escalation_metrics["positive_escalations"] + escalation_metrics["pending_escalations"],
-        "missing_docs_rate": 33 if escalations else 0,
+        "total_runs": total or len(escalations),
+        "auto_cleared": accepted,
+        "legal_recommended": pending,
+        "legal_required": denied + pending,
+        "missing_docs_rate": round(100 * denied / total) if total else 0,
         "top_triggers": [
             {"label": label.title(), "value": value}
             for label, value in trigger_counts.most_common(4)
         ],
         "playbook_deviations": [
-            {"label": "Red lines", "value": escalation_metrics["positive_escalations"] + escalation_metrics["pending_escalations"], "color": "red"},
-            {"label": "Fallback positions", "value": max(1, escalation_metrics["total_escalations"]), "color": "yellow"},
-            {"label": "Standard positions", "value": 3, "color": "green"},
+            {"label": "Red lines (denied)", "value": denied + pending, "color": "red"},
+            {"label": "Fallback positions", "value": max(1, total), "color": "yellow"},
+            {"label": "Approved by AI", "value": accepted, "color": "green"},
         ],
+        "per_agent_metrics": metrics["per_agent"],
+        "top_false_escalation_agent": metrics["top_false_escalation_agent"],
+        "top_positive_escalation_agent": metrics["top_positive_escalation_agent"],
         "recent_runs": [
             {
                 "id": item["id"],
@@ -309,9 +317,10 @@ async def _run_general_question(
     legal_qa = await LegalQAWorkflow().run(
         LegalQARequest(question=qa_text, use_case="ask_donna", contract_type=contract_type)
     )
+    resolved_domain = legal_qa.domain
     legal_sources = [_legal_source_payload(item) for item in legal_qa.legal_basis]
-    selected_sources = _auto_sources(contract_type, legal_qa.legal_basis, uploaded_texts)
-    source_usage = _source_usage(selected_sources, legal_qa.company_basis, legal_sources, uploaded_texts, contract_type)
+    selected_sources = _auto_sources(resolved_domain, legal_qa.legal_basis, uploaded_texts)
+    source_usage = _source_usage(selected_sources, legal_qa.company_basis, legal_sources, uploaded_texts, resolved_domain)
     escalation_state = "Legal review required before signature" if legal_qa.escalate else "No legal escalation recommended"
     payload = {
         "id": f"run-{uuid4().hex[:12]}",
@@ -326,13 +335,13 @@ async def _run_general_question(
         "routing_summary": "Ask Donna treated this as a general legal/playbook question and selected playbook and legal evidence automatically.",
         "escalation_state": escalation_state,
         "confidence": 0.72,
-        "plain_answer": f"{legal_qa.summary} {legal_qa.recommendation}".strip(),
+        "plain_answer": f"{legal_qa.summary} {_legal_basis_sentence(legal_qa.legal_basis)} {legal_qa.recommendation}".strip(),
         "legal_answer": _legal_answer(legal_qa),
         "next_action": "Escalate to Legal before proceeding." if legal_qa.escalate else "Use the cited playbook position and keep Legal available for ambiguity.",
         "matter_summary": {
             "agreement_type": "General legal/playbook question",
             "counterparty": "Not applicable",
-            "governing_law": "German law / EU GDPR" if contract_type == "data_protection" else "German law",
+            "governing_law": "German law / EU GDPR" if resolved_domain == "data_protection" else "German law",
             "contract_value": "Not provided",
             "personal_data": "personal data" in qa_text.lower() or "gdpr" in qa_text.lower(),
             "uploaded_documents": len(uploaded_texts),
@@ -361,7 +370,7 @@ async def _run_general_question(
         "metrics": {
             "finding_count": 0,
             "requires_escalation": legal_qa.escalate,
-            "contract_type": contract_type,
+            "contract_type": resolved_domain,
             "uploaded_documents": len(uploaded_texts),
             "legal_qa_escalate": legal_qa.escalate,
             "demo_mode": demo_mode,
@@ -603,6 +612,18 @@ def _legal_answer(legal_qa: Any) -> str:
     )
     suffix = f" Supporting legal evidence: {legal_sources}." if legal_sources else ""
     return f"{legal_qa.summary} {legal_qa.recommendation}{suffix}".strip()
+
+
+def _legal_basis_sentence(legal_basis: list[dict[str, Any]]) -> str:
+    if not legal_basis:
+        return "No German/EU legal evidence was returned for this query."
+    citations = ", ".join(str(item.get("citation") or "legal evidence") for item in legal_basis[:3])
+    fallback_items = [item for item in legal_basis if item.get("retrieval_mode") == "fallback" or "fallback" in str(item.get("source") or "").lower()]
+    if fallback_items:
+        reason = fallback_items[0].get("fallback_reason")
+        suffix = f" The live Otto Schmidt request fell back because: {reason}." if reason else " This is fallback evidence, not live Otto Schmidt research."
+        return f"German/EU legal basis checked: {citations}.{suffix}"
+    return f"German/EU legal basis checked through Otto Schmidt / Legal Data Hub: {citations}."
 
 
 def _next_action(result: AgentResult, legal_qa_escalate: bool, contract_status: str | None = None) -> str:

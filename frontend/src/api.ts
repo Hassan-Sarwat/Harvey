@@ -1,4 +1,4 @@
-import type { AppConfig, AskMode, DashboardMetrics, HistoryDetail, HistorySummary, RunResult } from "./types";
+import type { AppConfig, AskMode, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, HistoryDetail, HistorySummary, RunResult } from "./types";
 
 export async function getConfig(): Promise<AppConfig> {
   const response = await fetch("/api/config");
@@ -66,5 +66,44 @@ export async function dropHistoryItem(id: string, reason?: string): Promise<Hist
     body: JSON.stringify({ reason })
   });
   if (!response.ok) throw new Error("Could not drop history item");
+  return response.json();
+}
+
+export async function listEscalations(status?: EscalationStatus): Promise<{ items: EscalationListItem[] }> {
+  const url = status ? `/escalations?status=${encodeURIComponent(status)}` : "/escalations";
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Could not load escalations");
+  return response.json();
+}
+
+export async function getEscalation(id: string): Promise<EscalationDetail> {
+  const response = await fetch(`/escalations/${encodeURIComponent(id)}`);
+  if (!response.ok) throw new Error("Could not load escalation detail");
+  return response.json();
+}
+
+export async function askEscalationQuestion(id: string, question: string): Promise<{ answer: string; cited_context: unknown[] }> {
+  const response = await fetch(`/escalations/${encodeURIComponent(id)}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!response.ok) throw new Error("Could not get answer from escalation context");
+  return response.json();
+}
+
+export async function decideEscalation(
+  id: string,
+  payload: { decision: "accepted" | "denied"; notes?: string; fix_suggestions: string[]; decided_by?: string }
+): Promise<EscalationDetail> {
+  const response = await fetch(`/escalations/${encodeURIComponent(id)}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || "Could not save escalation decision");
+  }
   return response.json();
 }
