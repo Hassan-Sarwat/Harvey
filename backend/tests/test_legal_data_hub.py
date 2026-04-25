@@ -19,6 +19,7 @@ async def test_legal_data_hub_calls_otto_schmidt_api_when_credentials_are_config
             "source": "Otto Schmidt / Legal Data Hub",
             "citation": "BGB Section 276",
             "quote": "Intent cannot be released in advance.",
+            "retrieval_mode": "live",
         }
     ]
 

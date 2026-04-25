@@ -1,19 +1,27 @@
-import { useState } from "react";
-import { Layout, Page } from "./components/Layout";
-import { Dashboard } from "./pages/Dashboard";
-import { Escalations } from "./pages/Escalations";
-import { LegalQA } from "./pages/LegalQA";
-import { Review } from "./pages/Review";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import Index from "./pages/Index.tsx";
+import NotFound from "./pages/NotFound.tsx";
 
-export function App() {
-  const [page, setPage] = useState<Page>("review");
+const queryClient = new QueryClient();
 
-  return (
-    <Layout activePage={page} onPageChange={setPage}>
-      {page === "review" && <Review />}
-      {page === "legal-qa" && <LegalQA />}
-      {page === "escalations" && <Escalations />}
-      {page === "dashboard" && <Dashboard />}
-    </Layout>
-  );
-}
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;

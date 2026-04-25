@@ -81,7 +81,7 @@ def _ruling_reference(evidence: list[dict[str, Any]]) -> RulingReference | None:
 
 def _evidence_source(item: dict[str, Any]) -> str:
     source = str(item.get("source") or "Legal Data Hub fallback")
-    if source == "Legal Data Hub fallback":
+    if "fallback" in source.lower() and "Otto Schmidt" not in source:
         return "Otto Schmidt / Legal Data Hub fallback"
     return source
 

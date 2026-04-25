@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import csv
-from pathlib import Path
 from typing import Any
 
 from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
 from app.agents.trigger_utils import missing_term_trigger, sentence_trigger_for_phrase
+from app.services.playbook_repository import get_playbook_rule, playbook_source_label
 
 
-PLAYBOOK_SOURCE = "BMW mock playbook"
+PLAYBOOK_SOURCE = "BMW playbook"
 
 
 class PlaybookCheckerAgent(Agent):
@@ -19,24 +18,24 @@ class PlaybookCheckerAgent(Agent):
         suggestions: list[Suggestion] = []
         text = context.contract_text.lower()
         uploaded_playbook_evidence = _uploaded_playbook_evidence(context.playbook_documents)
-        dp_001 = _playbook_rule("data_protection", "DP-001")
-        dp_002 = _playbook_rule("data_protection", "DP-002")
-        dp_003 = _playbook_rule("data_protection", "DP-003")
-        dp_004 = _playbook_rule("data_protection", "DP-004")
-        dp_005 = _playbook_rule("data_protection", "DP-005")
-        dp_006 = _playbook_rule("data_protection", "DP-006")
-        dp_007 = _playbook_rule("data_protection", "DP-007")
-        dp_008 = _playbook_rule("data_protection", "DP-008")
-        dp_009 = _playbook_rule("data_protection", "DP-009")
-        dp_011 = _playbook_rule("data_protection", "DP-011")
-        lt_002 = _playbook_rule("litigation", "LT-002")
-        lt_003 = _playbook_rule("litigation", "LT-003")
-        lt_004 = _playbook_rule("litigation", "LT-004")
-        lt_005 = _playbook_rule("litigation", "LT-005")
-        lt_007 = _playbook_rule("litigation", "LT-007")
-        lt_008 = _playbook_rule("litigation", "LT-008")
-        lt_009 = _playbook_rule("litigation", "LT-009")
-        lt_011 = _playbook_rule("litigation", "LT-011")
+        dp_001 = get_playbook_rule("data_protection", "DP-001")
+        dp_002 = get_playbook_rule("data_protection", "DPA-002")
+        dp_003 = get_playbook_rule("data_protection", "DPA-003")
+        dp_004 = get_playbook_rule("data_protection", "DPA-001")
+        dp_005 = get_playbook_rule("data_protection", "DPA-005")
+        dp_006 = get_playbook_rule("data_protection", "DPA-004")
+        dp_007 = get_playbook_rule("data_protection", "DPA-007")
+        dp_008 = get_playbook_rule("data_protection", "DPA-008")
+        dp_009 = get_playbook_rule("data_protection", "DPA-006")
+        dp_011 = get_playbook_rule("data_protection", "DPA-001")
+        lt_002 = get_playbook_rule("litigation", "LT-002")
+        lt_003 = get_playbook_rule("litigation", "LT-003")
+        lt_004 = get_playbook_rule("litigation", "LT-004")
+        lt_005 = get_playbook_rule("litigation", "LT-005")
+        lt_007 = get_playbook_rule("litigation", "LT-007")
+        lt_008 = get_playbook_rule("litigation", "LT-008")
+        lt_009 = get_playbook_rule("litigation", "LT-009")
+        lt_011 = get_playbook_rule("litigation", "LT-011")
 
         if "bmw" not in text:
             ruling = _ruling_reference(PLAYBOOK_SOURCE, "data_protection", dp_001)
@@ -70,7 +69,7 @@ class PlaybookCheckerAgent(Agent):
                 Finding(
                     id="unlimited-liability",
                     title="Unlimited liability exceeds BMW default",
-                    description="The draft appears to accept unlimited liability, which exceeds the mock BMW playbook default.",
+                    description="The draft appears to accept unlimited liability, which exceeds the BMW litigation playbook default.",
                     severity=Severity.BLOCKER,
                     clause_reference=trigger.text if trigger else None,
                     trigger=trigger,
@@ -394,14 +393,15 @@ class PlaybookCheckerAgent(Agent):
 
         return AgentResult(
             agent_name=self.name,
-            summary="Checked draft against BMW mock playbook CSV rules.",
+            summary="Checked draft against the BMW playbook files in data/playbook.",
             findings=findings,
             suggestions=suggestions,
             confidence=0.7,
             requires_escalation=any(f.requires_escalation for f in findings),
             metadata={
                 "playbook_document_count": len(context.playbook_documents),
-                "playbook_sources": [document.get("filename") for document in context.playbook_documents],
+                "playbook_sources": [playbook_source_label("data_protection"), playbook_source_label("litigation")]
+                + [str(document.get("filename")) for document in context.playbook_documents],
             },
         )
 
@@ -418,20 +418,6 @@ def _uploaded_playbook_evidence(documents: list[dict]) -> list[Evidence]:
             )
         )
     return evidence
-
-
-def _playbook_rule(scope: str, rule_id: str) -> dict[str, Any]:
-    file_name = "bmw_data_protection.csv" if scope == "data_protection" else "bmw_litigation.csv"
-    path = Path(__file__).resolve().parents[3] / "data" / "playbook" / file_name
-    if not path.exists():
-        return {"id": rule_id, "title": rule_id, "default": "Playbook rule unavailable."}
-
-    with path.open(encoding="utf-8", newline="") as handle:
-        playbook = list(csv.DictReader(handle))
-    for rule in playbook:
-        if rule.get("id") == rule_id:
-            return rule
-    return {"id": rule_id, "title": rule_id, "default": "Playbook rule unavailable."}
 
 
 def _add_rule_finding(
@@ -476,7 +462,7 @@ def _add_rule_finding(
 
 def _ruling_reference(source: str, scope: str, rule: dict[str, Any]) -> RulingReference:
     return RulingReference(
-        source=f"{source}: {scope}",
+        source=f"{source}: {playbook_source_label(scope)}",
         citation=f"{rule.get('id', 'unknown')} - {rule.get('title', 'Untitled rule')}",
         quote=str(rule.get("default") or ""),
     )

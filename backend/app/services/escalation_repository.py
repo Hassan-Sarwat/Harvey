@@ -67,11 +67,12 @@ class EscalationRepository:
         version_number: int | None = None,
         business_reason: str | None = None,
         requested_by: str | None = None,
+        force: bool = False,
     ) -> dict[str, Any] | None:
-        if not review_result.requires_escalation:
+        if not review_result.requires_escalation and not force:
             return None
 
-        source_agents, source_finding_ids = _source_attribution(review_result)
+        source_agents, source_finding_ids = _source_attribution(review_result, include_all_findings=force)
         stored_review_result = review_result.model_dump(mode="json")
         if contract_text is not None:
             stored_review_result.setdefault("metadata", {})["contract_text"] = contract_text
@@ -203,23 +204,29 @@ class EscalationRepository:
         }
 
 
-def _source_attribution(review_result: AgentResult) -> tuple[list[str], list[str]]:
+def _source_attribution(review_result: AgentResult, *, include_all_findings: bool = False) -> tuple[list[str], list[str]]:
     agents: list[str] = []
     finding_ids: list[str] = []
     for agent_result in review_result.metadata.get("agent_results", []):
         agent_name = agent_result.get("agent_name")
         if not agent_name or agent_name == "risk_aggregator":
             continue
-        if not agent_result.get("requires_escalation"):
+        if not include_all_findings and not agent_result.get("requires_escalation"):
+            continue
+        agent_findings = agent_result.get("findings", [])
+        if include_all_findings and not agent_findings:
             continue
         agents.append(agent_name)
         for finding in agent_result.get("findings", []):
-            if finding.get("requires_escalation") and finding.get("id"):
+            if (include_all_findings or finding.get("requires_escalation")) and finding.get("id"):
                 finding_ids.append(finding["id"])
 
     if not agents and review_result.requires_escalation:
         agents.append(review_result.agent_name)
         finding_ids.extend(finding.id for finding in review_result.findings if finding.requires_escalation)
+    if not agents and include_all_findings and review_result.findings:
+        agents.append(review_result.agent_name)
+        finding_ids.extend(finding.id for finding in review_result.findings)
 
     return list(dict.fromkeys(agents)), list(dict.fromkeys(finding_ids))
 

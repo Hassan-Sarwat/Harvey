@@ -3,10 +3,11 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import contracts, dashboard, escalations, legal_qa
+from app.api import contracts, dashboard, escalations, history, intake, legal_qa
 from app.core.config import get_settings
 from app.services.contract_repository import ContractRepository
 from app.services.escalation_repository import EscalationRepository
+from app.services.history_repository import HistoryRepository
 
 settings = get_settings()
 
@@ -24,12 +25,15 @@ app.include_router(contracts.router)
 app.include_router(legal_qa.router)
 app.include_router(escalations.router)
 app.include_router(dashboard.router)
+app.include_router(intake.router)
+app.include_router(history.router)
 
 
 @app.on_event("startup")
 async def initialize_database() -> None:
     ContractRepository()
     EscalationRepository()
+    HistoryRepository()
 
 
 @app.get("/health")

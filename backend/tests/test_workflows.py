@@ -33,9 +33,9 @@ async def test_legal_qa_workflow_references_specific_internal_playbook_rule():
     )
 
     assert result.company_basis[0] == {
-        "source": "BMW mock playbook CSV: data_protection",
-        "citation": "DP-003 - Data subject rights cannot be waived",
-        "quote": "No clause may waive statutory data subject rights.",
-        "severity": "blocker",
-        "approved_fix": "Nothing in this Agreement limits rights available to data subjects under applicable data protection law.",
+        "source": "BMW Group DPA negotiation playbook: bmw_group_dpa_negotiation_playbook.csv",
+        "citation": "DPA-003 - Data subject rights assistance",
+        "quote": "Processor must promptly notify BMW Group of requests and assist BMW Group without responding directly unless instructed or legally required.",
+        "severity": "high",
+        "approved_fix": "Processor shall promptly notify BMW Group and provide reasonable assistance with data subject requests without separate charge unless BMW Group approves an exceptional fee.",
     }
