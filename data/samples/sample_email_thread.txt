@@ -1,0 +1,6 @@
+From: procurement@example.com
+To: legal@example.com
+Subject: Supplier liability position
+
+The supplier rejected the liability cap and asked BMW to accept unlimited liability.
+Procurement needs to know whether this can proceed without legal review.

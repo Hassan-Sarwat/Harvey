@@ -1,0 +1,27 @@
+{
+  "client": "BMW",
+  "scope": "data_protection",
+  "rules": [
+    {
+      "id": "DP-001",
+      "title": "BMW contracting entity required",
+      "severity": "high",
+      "default": "The applicable BMW contracting entity and address must be named.",
+      "escalate_if_missing": true
+    },
+    {
+      "id": "DP-002",
+      "title": "Subprocessor list required",
+      "severity": "medium",
+      "default": "Processor must list subprocessors or state that none are used.",
+      "escalate_if_missing": false
+    },
+    {
+      "id": "DP-003",
+      "title": "Data subject rights cannot be waived",
+      "severity": "blocker",
+      "default": "No clause may waive statutory data subject rights.",
+      "escalate_if_missing": true
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+Data Processing Agreement
+
+Supplier processes personal data on behalf of BMW for connected vehicle services.
+The agreement does not include an effective date. Supplier may appoint subprocessors
+with prior notice. The parties will comply with applicable data protection law.
