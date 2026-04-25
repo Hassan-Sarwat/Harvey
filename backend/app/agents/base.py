@@ -43,6 +43,7 @@ class ReviewContext(BaseModel):
     contract_text: str
     contract_type: str | None = None
     playbook_scope: list[str] = Field(default_factory=list)
+    playbook_documents: list[dict[str, Any]] = Field(default_factory=list)
     user_question: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 

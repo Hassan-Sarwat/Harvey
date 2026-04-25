@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     legal_data_hub_base_url: str = "https://api.legal-data-analytics.com"
     use_legal_fallback: bool = True
+    upload_storage_dir: str = "storage"
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8")
 

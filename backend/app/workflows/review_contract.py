@@ -18,6 +18,15 @@ class ContractReviewWorkflow:
 
     async def run(self, context: ReviewContext) -> AgentResult:
         results = [await agent.run(context) for agent in self.agents]
+        for result in results:
+            result.metadata["passed"] = _agent_passed(result)
         aggregate = self.aggregator.combine(results)
+        aggregate.metadata["passed"] = _agent_passed(aggregate)
         aggregate.metadata["agent_results"] = [result.model_dump() for result in results]
         return aggregate
+
+
+def _agent_passed(result: AgentResult) -> bool:
+    return not result.requires_escalation and all(
+        finding.severity.value not in {"high", "blocker"} for finding in result.findings
+    )
