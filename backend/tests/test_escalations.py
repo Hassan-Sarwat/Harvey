@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.agents.base import AgentResult, ContractTrigger, Finding, RulingReference, Severity, Suggestion
 from app.agents.legal_checker import LegalDataHubClient
-from app.api import contracts, dashboard, escalations
+from app.api import contracts, dashboard, escalations, intake
 from app.services.contract_repository import ContractRepository
 from app.services.escalation_repository import EscalationAlreadyDecidedError, EscalationRepository
 from app.services.review_storage import DocumentStore
@@ -171,6 +171,23 @@ async def test_dashboard_uses_live_escalation_metrics(tmp_path, monkeypatch):
 
     assert payload["escalation_metrics"]["false_escalations"] == 1
     assert payload["escalation_metrics"]["top_false_escalation_agent"]["agent_name"] == "playbook_checker"
+
+
+async def test_api_dashboard_lists_untriggered_agents(tmp_path, monkeypatch):
+    repository = EscalationRepository(f"sqlite:///{tmp_path / 'harvey.db'}")
+    monkeypatch.setattr(intake, "EscalationRepository", lambda: repository)
+    repository.create_from_review(contract_id="contract-1", review_result=_escalating_result())
+
+    payload = await intake.dashboard()
+
+    metrics_by_agent = {item["agent_name"]: item for item in payload["per_agent_metrics"]}
+    assert set(metrics_by_agent) == set(intake.LEGAL_ESCALATION_AGENT_IDS)
+    assert metrics_by_agent["playbook_checker"]["total"] == 1
+    assert metrics_by_agent["playbook_checker"]["label"] == "BMW Playbook Checker"
+    assert "document_summarizer" not in metrics_by_agent
+    assert "legal_qa" not in metrics_by_agent
+    assert "contract_understanding" not in metrics_by_agent
+    assert "risk_aggregator" not in metrics_by_agent
 
 
 async def test_review_endpoint_waits_for_business_escalation_decision(tmp_path, monkeypatch):

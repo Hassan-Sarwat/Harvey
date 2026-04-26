@@ -115,7 +115,7 @@ function applyAutoRoutingFallback(result: RunResult, wasAutoMode: boolean): RunR
 
 function App() {
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
-  const [activeView, setActiveView] = useState<"ask" | "history" | "dashboard" | "playbook" | "escalations">("ask");
+  const [activeView, setActiveView] = useState<"ask" | "history" | "dashboard" | "escalations">("ask");
   const [escalationCount, setEscalationCount] = useState(0);
   const [askMode, setAskMode] = useState<AskMode>("general_question");
   const [message, setMessage] = useState("");
@@ -204,8 +204,6 @@ function App() {
         <Topbar />
         {activeView === "dashboard" ? (
           <DashboardView dashboard={dashboard} />
-        ) : activeView === "playbook" ? (
-          <PlaybookView />
         ) : activeView === "escalations" ? (
           <EscalationsView />
         ) : activeView === "history" ? (
@@ -240,14 +238,13 @@ function App() {
   );
 }
 
-function Sidebar({ activeView, onChange, escalationCount }: { activeView: string; onChange: (view: "ask" | "history" | "dashboard" | "playbook" | "escalations") => void; escalationCount: number }) {
+function Sidebar({ activeView, onChange, escalationCount }: { activeView: string; onChange: (view: "ask" | "history" | "dashboard" | "escalations") => void; escalationCount: number }) {
   const general = [
     { id: "ask", label: "Ask Donna", icon: MessageSquareText },
     { id: "history", label: "History", icon: HistoryIcon }
   ] as const;
   const legal = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "playbook", label: "Playbook", icon: BookOpen },
     { id: "escalations", label: "Escalations", icon: AlertTriangle },
   ] as const;
   const admin = [
@@ -794,6 +791,23 @@ function HistoryView({
                           </div>
                         ))}
                       </div>
+                      {latestRun.result.agent_steps?.length ? (
+                        <div className="history-trace">
+                          <h3>Agent trace</h3>
+                          <div className="trace-list">
+                            {latestRun.result.agent_steps.map((step) => (
+                              <div className="trace-item" key={step.id}>
+                                <BrainCircuit size={16} />
+                                <div>
+                                  <strong>{step.label}</strong>
+                                  <p>{step.summary}</p>
+                                  {step.detail ? <span>{step.detail}</span> : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </>
                   ) : (
                     <div className="quiet-box">No run trace is stored for this item.</div>
@@ -861,7 +875,7 @@ function DashboardView({ dashboard }: { dashboard: DashboardMetrics | null }) {
               <div className="section-head">
                 <div>
                   <p className="eyebrow">Most false escalations</p>
-                  <h2>{topFalse.agent_name.replace(/_/g, " ")}</h2>
+                  <h2>{topFalse.label ?? topFalse.agent_name.replace(/_/g, " ")}</h2>
                 </div>
                 <span className="status-pill warning">{topFalse.false_escalations} accepted</span>
               </div>
@@ -873,7 +887,7 @@ function DashboardView({ dashboard }: { dashboard: DashboardMetrics | null }) {
               <div className="section-head">
                 <div>
                   <p className="eyebrow">Most valid escalations</p>
-                  <h2>{topPositive.agent_name.replace(/_/g, " ")}</h2>
+                  <h2>{topPositive.label ?? topPositive.agent_name.replace(/_/g, " ")}</h2>
                 </div>
                 <span className="status-pill">{topPositive.positive_escalations} denied</span>
               </div>
@@ -890,6 +904,9 @@ function DashboardView({ dashboard }: { dashboard: DashboardMetrics | null }) {
             <h2>Per-agent performance</h2>
             <span className="status-pill">False escalation = legal accepted (AI was wrong)</span>
           </div>
+          <p className="dash-callout-desc">
+            Only agents that can independently trigger Legal escalation are shown here. Assistance and aggregation steps stay in the contract trace.
+          </p>
           <div className="agent-table">
             <div className="agent-table-head">
               <span>Agent</span>
@@ -901,7 +918,10 @@ function DashboardView({ dashboard }: { dashboard: DashboardMetrics | null }) {
             </div>
             {agentMetrics.map((agent) => (
               <div className="agent-table-row" key={agent.agent_name}>
-                <span className="agent-table-name">{agent.agent_name.replace(/_/g, " ")}</span>
+                <span className="agent-table-name">
+                  <strong>{agent.label ?? agent.agent_name.replace(/_/g, " ")}</strong>
+                  {agent.description ? <small>{agent.description}</small> : null}
+                </span>
                 <span>{agent.total}</span>
                 <span>{agent.pending}</span>
                 <span>{agent.accepted}</span>
@@ -959,43 +979,6 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
       <span>{label}</span>
       <strong>{value}</strong>
     </section>
-  );
-}
-
-function PlaybookView() {
-  const rows = [
-    ["DPA required", "Signed DPA before processing", "DPA requested before go-live", "Processing without DPA"],
-    ["Breach notice", "24 hours", "Without undue delay, max 48 hours", "72 hours or no clear deadline"],
-    ["Subprocessors", "Prior written approval", "Notice plus objection right", "No notice or unrestricted changes"],
-    ["Transfers", "EEA or SCCs plus TIA", "Safeguards under review", "Unrestricted global transfers"],
-    ["TOMs", "TOMs attached", "Security whitepaper for intake", "No security annex"]
-  ];
-  return (
-    <div className="playbook-view">
-      <div className="page-title">
-        <div>
-          <p className="eyebrow">BMW playbook</p>
-          <h1>Clear positions for what to accept, where to bend, and where to stop.</h1>
-        </div>
-      </div>
-      <section className="timeline-card">
-        <div className="playbook-legend">
-          <span><i className="legend-dot green" /> Standard position</span>
-          <span><i className="legend-dot yellow" /> Fallback</span>
-          <span><i className="legend-dot red" /> Red line</span>
-        </div>
-        <div className="playbook-table">
-          {rows.map((row) => (
-            <div className="playbook-row" key={row[0]}>
-              <strong>{row[0]}</strong>
-              <span>{row[1]}</span>
-              <span>{row[2]}</span>
-              <span>{row[3]}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
   );
 }
 

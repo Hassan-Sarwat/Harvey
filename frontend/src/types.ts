@@ -234,10 +234,14 @@ export type EscalationDetail = EscalationListItem & {
 
 export type AgentMetric = {
   agent_name: string;
+  label?: string;
+  description?: string;
   total: number;
   pending: number;
   accepted: number;
   denied: number;
+  false_escalations?: number;
+  positive_escalations?: number;
   false_escalation_rate: number;
 };
 
@@ -250,8 +254,8 @@ export type DashboardMetrics = {
   top_triggers: Array<{ label: string; value: number }>;
   playbook_deviations: Array<{ label: string; value: number; color: string }>;
   per_agent_metrics?: AgentMetric[];
-  top_false_escalation_agent?: { agent_name: string; false_escalations: number } | null;
-  top_positive_escalation_agent?: { agent_name: string; positive_escalations: number } | null;
+  top_false_escalation_agent?: { agent_name: string; label?: string; description?: string; false_escalations: number } | null;
+  top_positive_escalation_agent?: { agent_name: string; label?: string; description?: string; positive_escalations: number } | null;
   recent_runs: Array<{
     id: string;
     question: string;

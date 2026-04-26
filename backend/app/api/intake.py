@@ -95,6 +95,10 @@ AGENTS = [
 ]
 
 AGENT_LABELS = {item["id"]: item["label"] for item in AGENTS}
+LEGAL_ESCALATION_AGENT_IDS = (
+    "playbook_checker",
+    "legal_checker",
+)
 
 
 @router.get("/config")
@@ -122,6 +126,7 @@ async def dashboard() -> dict[str, Any]:
     accepted = metrics["accepted_escalations"]
     denied = metrics["denied_escalations"]
     pending = metrics["pending_escalations"]
+    per_agent_metrics = _dashboard_agent_metrics(metrics["per_agent"])
 
     return {
         "total_runs": total or len(escalations),
@@ -138,9 +143,9 @@ async def dashboard() -> dict[str, Any]:
             {"label": "Fallback positions", "value": max(1, total), "color": "yellow"},
             {"label": "Approved by AI", "value": accepted, "color": "green"},
         ],
-        "per_agent_metrics": metrics["per_agent"],
-        "top_false_escalation_agent": metrics["top_false_escalation_agent"],
-        "top_positive_escalation_agent": metrics["top_positive_escalation_agent"],
+        "per_agent_metrics": per_agent_metrics,
+        "top_false_escalation_agent": _dashboard_top_agent(per_agent_metrics, "false_escalations"),
+        "top_positive_escalation_agent": _dashboard_top_agent(per_agent_metrics, "positive_escalations"),
         "recent_runs": [
             {
                 "id": item["id"],
@@ -419,6 +424,55 @@ async def _run_general_question(
     )
     payload["history_thread_id"] = detail["id"]
     return payload
+
+
+def _dashboard_agent_metrics(per_agent: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    metrics_by_agent = {str(item.get("agent_name")): dict(item) for item in per_agent if item.get("agent_name")}
+    escalation_agents = [agent for agent in AGENTS if agent["id"] in LEGAL_ESCALATION_AGENT_IDS]
+    escalation_agent_ids = {agent["id"] for agent in escalation_agents}
+    configured_agent_ids = {agent["id"] for agent in AGENTS}
+    complete_metrics: list[dict[str, Any]] = []
+
+    for agent in escalation_agents:
+        agent_id = agent["id"]
+        metric = _empty_agent_metric(agent_id)
+        metric.update(metrics_by_agent.get(agent_id, {}))
+        metric["agent_name"] = agent_id
+        metric["label"] = agent["label"]
+        metric["description"] = agent["description"]
+        complete_metrics.append(metric)
+
+    for agent_id in sorted(set(metrics_by_agent) - escalation_agent_ids - configured_agent_ids):
+        metric = _empty_agent_metric(agent_id)
+        metric.update(metrics_by_agent[agent_id])
+        metric.setdefault("label", agent_id.replace("_", " ").title())
+        metric.setdefault("description", "Agent recorded on escalation history.")
+        complete_metrics.append(metric)
+
+    return complete_metrics
+
+
+def _dashboard_top_agent(metrics: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    candidates = [metric for metric in metrics if int(metric.get(key, 0) or 0) > 0]
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda item: (int(item.get(key, 0) or 0), str(item.get("agent_name") or "")))
+
+
+def _empty_agent_metric(agent_id: str) -> dict[str, Any]:
+    return {
+        "agent_name": agent_id,
+        "label": agent_id.replace("_", " ").title(),
+        "description": "",
+        "total": 0,
+        "pending": 0,
+        "accepted": 0,
+        "denied": 0,
+        "false_escalations": 0,
+        "positive_escalations": 0,
+        "false_escalation_rate": 0.0,
+    }
 
 
 async def _extract_uploaded_texts(files: list[UploadFile]) -> list[dict[str, str]]:

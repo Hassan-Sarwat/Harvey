@@ -289,8 +289,7 @@ button {
 
 .center-pane,
 .right-pane,
-.dashboard-view,
-.playbook-view {
+.dashboard-view {
   min-width: 0;
 }
 
@@ -1329,7 +1328,6 @@ pre {
 }
 
 .dashboard-view,
-.playbook-view,
 .history-view {
   padding: 38px;
 }
@@ -1441,7 +1439,8 @@ pre {
 }
 
 .history-chat h3,
-.history-reasoning h3 {
+.history-reasoning h3,
+.history-trace h3 {
   margin: 0 0 12px;
   color: #111a2e;
   font-size: 16px;
@@ -1472,6 +1471,47 @@ pre {
 
 .history-sources {
   margin-top: 12px;
+}
+
+.history-trace {
+  margin-top: 18px;
+}
+
+.trace-list {
+  display: grid;
+  gap: 10px;
+}
+
+.trace-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dce3ed;
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.trace-item svg {
+  color: #003a7c;
+  margin-top: 2px;
+}
+
+.trace-item strong {
+  color: #111a2e;
+  font-size: 14px;
+}
+
+.trace-item p {
+  margin: 5px 0;
+  color: #465671;
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.trace-item span {
+  color: #64728a;
+  font-size: 12px;
 }
 
 .history-events {
@@ -1592,53 +1632,6 @@ pre {
   border-bottom: 1px solid #dce3ed;
 }
 
-.playbook-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  margin-bottom: 18px;
-  font-weight: 900;
-}
-
-.legend-dot {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  margin-right: 7px;
-}
-
-.legend-dot.green {
-  background: #22b786;
-}
-
-.legend-dot.yellow {
-  background: #f2b83a;
-}
-
-.legend-dot.red {
-  background: #e84862;
-}
-
-.playbook-table {
-  display: grid;
-  gap: 8px;
-}
-
-.playbook-row {
-  display: grid;
-  grid-template-columns: 180px repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #dce3ed;
-  border-radius: 2px;
-}
-
-.playbook-row span {
-  color: #53637b;
-  line-height: 1.4;
-}
-
 .spin {
   animation: spin 0.85s linear infinite;
 }
@@ -1705,7 +1698,6 @@ pre {
 
   .workspace,
   .dashboard-view,
-  .playbook-view,
   .history-view {
     padding: 16px;
   }
@@ -1763,9 +1755,6 @@ pre {
     justify-self: start;
   }
 
-  .playbook-row {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ════════════════════════════════════════════
@@ -2249,7 +2238,7 @@ pre {
 .agent-table-head,
 .agent-table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1.5fr 1.5fr 1fr;
+  grid-template-columns: minmax(220px, 2.4fr) 1fr 1fr 1.5fr 1.5fr 1fr;
   gap: 0;
 }
 
@@ -2282,8 +2271,21 @@ pre {
 }
 
 .agent-table-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-table-name strong {
+  color: #18243a;
+  font-weight: 800;
+}
+
+.agent-table-name small {
+  color: #64748b;
+  font-size: 0.76rem;
   font-weight: 500;
-  text-transform: capitalize;
+  line-height: 1.35;
 }
 
 .agent-rate {
