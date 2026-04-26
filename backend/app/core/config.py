@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     lda_secret: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.5"
+    openai_reasoning_effort: str | None = None
     legal_data_hub_base_url: str = "https://otto-schmidt.legal-data-hub.com"
     legal_data_hub_qna_path: str = "/api/qna"
     legal_data_hub_search_path: str = "/api/search"
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     use_legal_fallback: bool = True
     upload_storage_dir: str = "storage"
     database_url: str | None = None
+    contract_value_escalation_threshold_eur: float = 100000.0
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8")
 

@@ -13,6 +13,7 @@ from app.agents.base import AgentResult, Finding, ReviewContext, Severity
 from app.services.document_ingestion import extract_document_text
 from app.services.escalation_repository import EscalationRepository
 from app.services.history_repository import APPROVED, PENDING_LEGAL, HistoryRepository
+from app.services.contract_classifier import classify_contract_type, infer_contract_type_fallback
 from app.workflows.general_question import GeneralQuestionRequest, GeneralQuestionWorkflow
 from app.workflows.legal_qa import LegalQARequest, LegalQAWorkflow
 from app.workflows.review_contract import ContractReviewWorkflow
@@ -75,7 +76,12 @@ AGENTS = [
     {
         "id": "contract_understanding",
         "label": "Contract Understanding",
-        "description": "Classifies agreement type, party context, and likely contract domain.",
+        "description": "Uses an LLM to classify agreement type, party context, and likely contract domain.",
+    },
+    {
+        "id": "contract_triage",
+        "label": "Contract Triage",
+        "description": "Checks the four Legal escalation gates: playbook coverage, value, uncovered matter, and high-risk matter.",
     },
     {
         "id": "playbook_checker",
@@ -96,6 +102,7 @@ AGENTS = [
 
 AGENT_LABELS = {item["id"]: item["label"] for item in AGENTS}
 LEGAL_ESCALATION_AGENT_IDS = (
+    "contract_triage",
     "playbook_checker",
     "legal_checker",
 )
@@ -249,7 +256,8 @@ async def _run_intake(
         )
 
     contract_text = _combined_contract_text(question, context, uploaded_texts)
-    contract_type = _infer_contract_type(contract_text)
+    classification = await classify_contract_type(contract_text)
+    contract_type = classification.contract_type
     routed_agents = selected_agents or _auto_route_agents(contract_text, contract_type)
     created_at = datetime.now(UTC).isoformat()
     contract_id = f"intake-{uuid4().hex[:10]}"
@@ -265,6 +273,7 @@ async def _run_intake(
                 "selected_sources": selected_sources,
                 "selected_agents": selected_agents,
                 "uploaded_filenames": [item["filename"] for item in uploaded_texts],
+                "contract_classification": classification.model_dump(),
             },
         )
     )
@@ -314,6 +323,8 @@ async def _run_intake(
             "finding_count": len(review_result.findings),
             "requires_escalation": review_result.requires_escalation,
             "contract_type": contract_type,
+            "contract_classification_source": classification.source,
+            "contract_classification_confidence": classification.confidence,
             "uploaded_documents": len(uploaded_texts),
             "legal_qa_escalate": legal_qa.escalate,
             "answer_kind": getattr(legal_qa, "answer_kind", "rule_specific"),
@@ -347,7 +358,8 @@ async def _run_general_question(
 ) -> dict[str, Any]:
     created_at = datetime.now(UTC).isoformat()
     inference_text = _combined_contract_text(question, context, uploaded_texts)
-    contract_type = _infer_contract_type(inference_text)
+    classification = await classify_contract_type(inference_text)
+    contract_type = classification.contract_type
     general_qa = await GeneralQuestionWorkflow().run(
         GeneralQuestionRequest(
             question=question,
@@ -401,6 +413,8 @@ async def _run_general_question(
             "finding_count": 0,
             "requires_escalation": general_qa.escalate,
             "contract_type": resolved_domain,
+            "contract_classification_source": classification.source,
+            "contract_classification_confidence": classification.confidence,
             "uploaded_documents": len(uploaded_texts),
             "legal_qa_escalate": general_qa.escalate,
             "answer_kind": general_qa.answer_kind,
@@ -554,43 +568,13 @@ def _combined_contract_text(question: str, context: str, uploaded_texts: list[di
 
 
 def _infer_contract_type(text: str) -> str:
-    normalized = text.lower()
-    data_terms = (
-        "gdpr",
-        "personal data",
-        "data subject",
-        "processor",
-        "controller",
-        "subprocessor",
-        "breach notification",
-        "third-country",
-        "third country",
-        "tom",
-    )
-    litigation_terms = (
-        "litigation",
-        "settlement",
-        "liability",
-        "indemnity",
-        "court",
-        "arbitration",
-        "legal hold",
-        "governing law",
-        "claims",
-    )
-    data_score = sum(1 for term in data_terms if term in normalized)
-    litigation_score = sum(1 for term in litigation_terms if term in normalized)
-    if data_score >= litigation_score and data_score > 0:
-        return "data_protection"
-    if litigation_score > 0:
-        return "litigation"
-    return "general"
+    return infer_contract_type_fallback(text)
 
 
 def _auto_route_agents(text: str, contract_type: str) -> list[str]:
-    routed = ["contract_understanding", "playbook_checker", "risk_aggregator"]
+    routed = ["contract_understanding", "contract_triage", "playbook_checker", "risk_aggregator"]
     if contract_type in {"data_protection", "litigation"} or any(term in text.lower() for term in ("gdpr", "liability", "waive")):
-        routed.insert(2, "legal_checker")
+        routed.insert(3, "legal_checker")
     return routed
 
 

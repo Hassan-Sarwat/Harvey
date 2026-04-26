@@ -1,6 +1,9 @@
 import pytest
 
 from app.agents.base import ReviewContext
+from app.core.config import get_settings
+from app.services.contract_classifier import ContractClassification
+from app.services import contract_classifier
 from app.workflows import legal_qa as legal_qa_module
 from app.workflows.legal_qa import LegalQARequest, LegalQAWorkflow
 from app.workflows.review_contract import ContractReviewWorkflow
@@ -21,7 +24,58 @@ async def test_contract_review_workflow_returns_aggregate():
 
     assert result.agent_name == "risk_aggregator"
     assert result.requires_escalation is True
-    assert result.metadata["agent_count"] == 3
+    assert result.metadata["agent_count"] == 4
+    assert len(result.metadata["escalation_conditions"]) == 4
+
+
+async def test_contract_review_uses_llm_classifier(monkeypatch):
+    async def _fake_llm_classification(_text: str):
+        return ContractClassification(
+            contract_type="data_protection",
+            confidence=0.91,
+            rationale="The LLM identified a DPA/privacy addendum.",
+            source="openai_llm",
+        )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    get_settings.cache_clear()
+    monkeypatch.setattr(contract_classifier, "_llm_contract_classification", _fake_llm_classification)
+
+    result = await ContractReviewWorkflow().run(
+        ReviewContext(contract_id="c1", contract_text="BMW vendor privacy addendum for analytics services.")
+    )
+
+    understanding = next(item for item in result.metadata["agent_results"] if item["agent_name"] == "contract_understanding")
+    assert understanding["metadata"]["inferred_contract_type"] == "data_protection"
+    assert understanding["metadata"]["classification_source"] == "openai_llm"
+
+
+async def test_contract_review_escalates_when_value_exceeds_threshold():
+    result = await ContractReviewWorkflow().run(
+        ReviewContext(
+            contract_id="c1",
+            contract_type="data_protection",
+            contract_text="Effective Date: 1 January 2026. BMW contract value is EUR 250,000 for processor services.",
+        )
+    )
+
+    assert result.requires_escalation is True
+    assert any(finding.id == "contract-value-threshold" for finding in result.findings)
+    condition = next(item for item in result.metadata["escalation_conditions"] if item["id"] == "contract_value_threshold")
+    assert condition["triggered"] is True
+
+
+async def test_contract_review_escalates_when_matter_not_covered_by_playbook():
+    result = await ContractReviewWorkflow().run(
+        ReviewContext(
+            contract_id="c1",
+            contract_type="general",
+            contract_text="Effective Date: 1 January 2026. BMW enters into a cafeteria services agreement.",
+        )
+    )
+
+    assert result.requires_escalation is True
+    assert any(finding.id == "matter-not-covered-by-playbook" for finding in result.findings)
 
 
 async def test_legal_qa_workflow_returns_company_and_legal_basis():

@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.agents.base import AgentResult, ReviewContext
+from app.services.contract_classifier import classify_contract_type, infer_contract_type_fallback
 from app.services.contract_repository import ContractIdentity, ContractRepository
 from app.services.escalation_repository import EscalationRepository
 from app.services.document_ingestion import extract_document_text
@@ -85,7 +86,7 @@ async def upload_playbook_documents(files: list[UploadFile] = File(...)) -> dict
 @router.post("/review")
 async def review_contract_by_identity(request: ContractReviewRequest) -> dict:
     repository = ContractRepository()
-    resolved_contract_type, contract_type_source = _resolve_contract_type(request.contract_type, request.contract_text)
+    resolved_contract_type, contract_type_source, classification_payload = await _resolve_contract_type(request.contract_type, request.contract_text)
     identity = _identity_from_request(request, resolved_contract_type)
     contract, is_new_contract = repository.get_or_create_contract(identity)
     version_number = contract.current_version_number + 1
@@ -106,10 +107,11 @@ async def review_contract_by_identity(request: ContractReviewRequest) -> dict:
             "version_number": version_number,
             "is_new_contract": is_new_contract,
             "contract_type_source": contract_type_source,
+            "contract_classification": classification_payload,
         },
     )
     result = await ContractReviewWorkflow().run(context)
-    _finalize_review_result(result, resolved_contract_type, contract_type_source)
+    _finalize_review_result(result, resolved_contract_type, contract_type_source, classification_payload)
     review_path = store.save_review_result(contract.contract_id, contract_document, result, version_number=version_number)
     version = repository.create_version(
         contract_id=contract.contract_id,
@@ -152,7 +154,7 @@ async def review_uploaded_contract_by_identity(
         extracted_text = extract_document_text(file.filename or "contract", content)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    resolved_contract_type, contract_type_source = _resolve_contract_type(contract_type, extracted_text)
+    resolved_contract_type, contract_type_source, classification_payload = await _resolve_contract_type(contract_type, extracted_text)
     repository = ContractRepository()
     identity = _identity_from_request(identity_request, resolved_contract_type)
     contract, is_new_contract = repository.get_or_create_contract(identity)
@@ -182,10 +184,11 @@ async def review_uploaded_contract_by_identity(
             "version_number": version_number,
             "is_new_contract": is_new_contract,
             "contract_type_source": contract_type_source,
+            "contract_classification": classification_payload,
         },
     )
     result = await ContractReviewWorkflow().run(context)
-    _finalize_review_result(result, resolved_contract_type, contract_type_source)
+    _finalize_review_result(result, resolved_contract_type, contract_type_source, classification_payload)
     review_path = store.save_review_result(contract.contract_id, contract_document, result, version_number=version_number)
     version = repository.create_version(
         contract_id=contract.contract_id,
@@ -251,14 +254,15 @@ async def escalate_contract_version(
 
 @router.post("/{contract_id}/review")
 async def review_contract(contract_id: str, request: ContractCreateRequest) -> dict:
-    resolved_contract_type, contract_type_source = _resolve_contract_type(request.contract_type, request.contract_text)
+    resolved_contract_type, contract_type_source, classification_payload = await _resolve_contract_type(request.contract_type, request.contract_text)
     context = ReviewContext(
         contract_id=contract_id,
         contract_text=request.contract_text,
         contract_type=resolved_contract_type,
+        metadata={"contract_type_source": contract_type_source, "contract_classification": classification_payload},
     )
     result = await ContractReviewWorkflow().run(context)
-    _finalize_review_result(result, resolved_contract_type, contract_type_source)
+    _finalize_review_result(result, resolved_contract_type, contract_type_source, classification_payload)
     payload = result.model_dump()
     return payload
 
@@ -280,7 +284,7 @@ async def review_uploaded_contract(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     playbook_documents = store.load_playbook_documents(playbook_id) if playbook_id else []
-    resolved_contract_type, contract_type_source = _resolve_contract_type(contract_type, contract_document["text"])
+    resolved_contract_type, contract_type_source, classification_payload = await _resolve_contract_type(contract_type, contract_document["text"])
     context = ReviewContext(
         contract_id=contract_id,
         contract_text=contract_document["text"],
@@ -290,10 +294,11 @@ async def review_uploaded_contract(
             "contract_document": {key: value for key, value in contract_document.items() if key != "text"},
             "playbook_id": playbook_id,
             "contract_type_source": contract_type_source,
+            "contract_classification": classification_payload,
         },
     )
     result = await ContractReviewWorkflow().run(context)
-    _finalize_review_result(result, resolved_contract_type, contract_type_source)
+    _finalize_review_result(result, resolved_contract_type, contract_type_source, classification_payload)
     review_path = store.save_review_result(contract_id, contract_document, result)
     payload = result.model_dump()
     payload["metadata"]["contract_document"] = context.metadata["contract_document"]
@@ -339,53 +344,26 @@ def _review_payload(
     return payload
 
 
-def _finalize_review_result(result: AgentResult, contract_type: str, contract_type_source: str) -> None:
+def _finalize_review_result(
+    result: AgentResult,
+    contract_type: str,
+    contract_type_source: str,
+    classification_payload: dict,
+) -> None:
     result.metadata["recognized_contract_type"] = contract_type
     result.metadata["contract_type_source"] = contract_type_source
+    result.metadata["contract_classification"] = classification_payload
     result.metadata["business_status"] = "needs_revision" if result.findings else "accepted"
     result.metadata["escalation_available"] = result.requires_escalation
 
 
-def _resolve_contract_type(contract_type: str | None, contract_text: str) -> tuple[str, str]:
-    normalized = (contract_type or "").strip()
-    if normalized:
-        return normalized, "user_provided"
-    return _infer_contract_type(contract_text), "ai_inferred"
+async def _resolve_contract_type(contract_type: str | None, contract_text: str) -> tuple[str, str, dict]:
+    classification = await classify_contract_type(contract_text, provided_type=contract_type)
+    return classification.contract_type, classification.source, classification.model_dump()
 
 
 def _infer_contract_type(contract_text: str) -> str:
-    text = contract_text.lower()
-    data_protection_terms = (
-        "gdpr",
-        "personal data",
-        "data subject",
-        "processor",
-        "controller",
-        "subprocessor",
-        "data processing",
-        "breach notification",
-        "technical and organisational",
-        "third-country",
-    )
-    litigation_terms = (
-        "litigation",
-        "settlement",
-        "liability",
-        "indemnity",
-        "court",
-        "arbitration",
-        "legal hold",
-        "governing law",
-        "claims",
-        "privilege",
-    )
-    data_score = sum(1 for term in data_protection_terms if term in text)
-    litigation_score = sum(1 for term in litigation_terms if term in text)
-    if data_score > litigation_score and data_score > 0:
-        return "data_protection"
-    if litigation_score > 0:
-        return "litigation"
-    return "general"
+    return infer_contract_type_fallback(contract_text)
 
 
 def _optional_form_value(value):

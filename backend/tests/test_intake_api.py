@@ -449,7 +449,13 @@ async def test_final_contract_review_sets_history_status(tmp_path, monkeypatch):
     monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
 
     approved = await intake.analyze(
-        message="This is the final version. Effective Date: 1 January 2026. Services agreement between BMW and ACME for a training workshop.",
+        message=(
+            "This is the final version. Effective Date: 1 January 2026. "
+            "BMW is controller and Supplier is processor of personal data under GDPR. "
+            "Supplier processes personal data only on BMW documented instructions, uses named approved subprocessors, "
+            "notifies BMW without undue delay after any personal data breach, maintains TOMs, allows audits, "
+            "does not transfer data outside the EU/EEA, and deletes or returns data within 10 business days."
+        ),
         mode="contract_review",
         is_final_version=True,
         files=[],

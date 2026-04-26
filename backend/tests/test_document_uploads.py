@@ -139,7 +139,8 @@ async def test_contract_type_is_inferred_when_not_supplied(tmp_path, monkeypatch
     )
 
     assert payload["metadata"]["recognized_contract_type"] == "data_protection"
-    assert payload["metadata"]["contract_type_source"] == "ai_inferred"
+    assert payload["metadata"]["contract_type_source"] == "keyword_fallback"
+    assert payload["metadata"]["contract_classification"]["source"] == "keyword_fallback"
 
     history = await contracts.list_contract_versions(payload["contract_id"])
     assert history["versions"][0]["contract_type"] == "data_protection"

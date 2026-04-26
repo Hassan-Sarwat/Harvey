@@ -395,13 +395,29 @@ function AskDonnaView(props: {
 
           <div className="composer">
             <div className="composer-toolbar">
-              <label className="mode-select">
+              <div className="mode-switch" role="group" aria-label="Ask Donna mode">
                 <span>Mode</span>
-                <select value={props.mode} onChange={(event) => props.setMode(event.target.value as AskMode)}>
-                  <option value="general_question">General question</option>
-                  <option value="contract_review">Contract review</option>
-                </select>
-              </label>
+                <div className="mode-switch-track">
+                  <button
+                    type="button"
+                    className={props.mode === "general_question" ? "mode-switch-option active" : "mode-switch-option"}
+                    onClick={() => props.setMode("general_question")}
+                    aria-pressed={props.mode === "general_question"}
+                  >
+                    <MessageSquareText size={16} />
+                    General
+                  </button>
+                  <button
+                    type="button"
+                    className={props.mode === "contract_review" ? "mode-switch-option active" : "mode-switch-option"}
+                    onClick={() => props.setMode("contract_review")}
+                    aria-pressed={props.mode === "contract_review"}
+                  >
+                    <FileSearch size={16} />
+                    Contract
+                  </button>
+                </div>
+              </div>
               {props.mode === "contract_review" ? (
                 <button
                   className={props.isFinalVersion ? "final-toggle selected" : "final-toggle"}

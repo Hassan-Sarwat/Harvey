@@ -529,7 +529,7 @@ button {
   gap: 12px;
 }
 
-.mode-select {
+.mode-switch {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -537,20 +537,46 @@ button {
   font-weight: 900;
 }
 
-.mode-select span {
+.mode-switch > span {
   color: #5c687e;
   font-size: 13px;
   text-transform: uppercase;
 }
 
-.mode-select select {
+.mode-switch-track {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
   min-height: 42px;
+  padding: 3px;
   border: 1px solid #cfd7e3;
   border-radius: 2px;
-  padding: 0 36px 0 12px;
-  color: #111a2e;
+  background: #eef3f8;
+}
+
+.mode-switch-option {
+  min-width: 124px;
+  border: 0;
+  border-radius: 2px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #58657b;
+  background: transparent;
+  font-weight: 900;
+}
+
+.mode-switch-option.active {
+  color: #ffffff;
+  background: #174f92;
+  box-shadow: 0 1px 2px rgba(6, 26, 53, 0.14);
+}
+
+.mode-switch-option:not(.active):hover {
+  color: #1b2944;
   background: #ffffff;
-  font-weight: 800;
 }
 
 .final-toggle,

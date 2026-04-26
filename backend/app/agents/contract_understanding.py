@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.agents.base import Agent, AgentResult, Finding, ReviewContext, Severity
 from app.agents.trigger_utils import missing_term_trigger
+from app.services.contract_classifier import classify_contract_type
 
 
 class ContractUnderstandingAgent(Agent):
@@ -25,15 +26,19 @@ class ContractUnderstandingAgent(Agent):
                 )
             )
 
-        inferred_type = context.contract_type or (
-            "data_protection" if "personal data" in lower_text or "gdpr" in lower_text else "litigation"
-        )
+        classification = await classify_contract_type(context.contract_text, provided_type=context.contract_type)
+        inferred_type = classification.contract_type
 
         return AgentResult(
             agent_name=self.name,
             summary=f"Contract classified as {inferred_type}.",
             findings=findings,
             confidence=0.55,
-            metadata={"inferred_contract_type": inferred_type},
+            metadata={
+                "inferred_contract_type": inferred_type,
+                "classification_source": classification.source,
+                "classification_confidence": classification.confidence,
+                "classification_rationale": classification.rationale,
+            },
             requires_escalation=any(f.requires_escalation for f in findings),
         )
