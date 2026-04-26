@@ -672,7 +672,7 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
   if (!check || check.status !== "needs_business_input") return null;
 
   const missing = check.missing_items ?? [];
-  const escalationFindings = (result.findings ?? []).filter(isLegalEscalationFinding).slice(0, 3);
+  const escalationFindings = primaryPlaybookEscalationFindings(result.findings ?? []);
   const sourceLabel = check.source === "openai" ? "LLM file check" : "File reference parser";
 
   const uploadArea = (title: string, description: string, visibleCount: number) => (
@@ -1025,7 +1025,7 @@ function LegalTicketModal({
 }
 
 function EscalationReasonPanel({ result }: { result: RunResult }) {
-  const escalationFindings = (result.findings ?? []).filter(isLegalEscalationFinding).slice(0, 3);
+  const escalationFindings = primaryPlaybookEscalationFindings(result.findings ?? []);
   if (!escalationFindings.length) return null;
 
   return (
@@ -1148,6 +1148,14 @@ function isCompletenessFinding(finding: Finding) {
 
 function isLegalEscalationFinding(finding: Finding) {
   return !isCompletenessFinding(finding) && finding.severity === "High";
+}
+
+function primaryPlaybookEscalationFindings(findings: Finding[]) {
+  const highFindings = findings.filter(isLegalEscalationFinding);
+  const explicitPlaybookFinding = highFindings.find((finding) => finding.category.toLowerCase() === "playbook");
+  const generatedPlaybookFinding = highFindings.find((finding) => finding.id.toLowerCase().startsWith("playbook-deviation"));
+  const selected = explicitPlaybookFinding ?? generatedPlaybookFinding ?? highFindings[0];
+  return selected ? [selected] : [];
 }
 
 function businessActionLabel(action?: string) {
