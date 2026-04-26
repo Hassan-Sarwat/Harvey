@@ -248,10 +248,12 @@ function App() {
       setError("Ask Donna needs a question, contract text, or uploaded file.");
       return;
     }
+    const displayedMessage =
+      submitted || (askMode === "general_question" ? "Summarize uploaded document(s)." : "Review uploaded contract bundle.");
     setIsRunning(true);
     setError(null);
     if (!demoMode) {
-      setChatMessages((items) => [...items, { role: "user", content: submitted }]);
+      setChatMessages((items) => [...items, { role: "user", content: displayedMessage }]);
       setMessage("");
     }
     try {
@@ -441,7 +443,7 @@ function AskDonnaView(props: {
   const placeholder =
     props.mode === "contract_review"
       ? "Paste the contract text, describe the business context, or upload a file. Ask Donna will identify the contract type and route the right checks."
-      : "Ask a legal or playbook question. Add any business context in the same message.";
+      : "Ask about law, BMW playbook positions, or an uploaded document. For example: summarize this PDF or explain GDPR Art. 28.";
 
   return (
     <div className="workspace ask-workspace">
@@ -631,8 +633,8 @@ function UploadBox({ files, setFiles }: { files: File[]; setFiles: (files: File[
     <div className="upload-box">
       <UploadCloud size={24} />
       <div>
-        <strong>Upload contract bundle</strong>
-        <span>PDF, DOCX, XLSX, PPTX, TXT, CSV, EML, or ZIP</span>
+        <strong>Upload document bundle</strong>
+        <span>Contracts, annexes, emails, spreadsheets, PDFs, or ZIPs</span>
       </div>
       <label className="file-button">
         <FolderOpen size={17} />
@@ -691,6 +693,7 @@ function AgentTimeline({ steps, isRunning }: { steps: AgentStep[]; isRunning: bo
 function ResultPanel({ result, agentLabelsById }: { result: RunResult; agentLabelsById: Record<string, string> }) {
   const routingMode = result.agent_routing_mode ?? "manual";
   const routedLabels = (result.routed_agents ?? []).map((agentId) => agentLabelsById[agentId] ?? agentId);
+  const suggestionLabel = result.mode === "general_question" ? "Recommended next step" : "Suggested fallback language";
   return (
     <section className="result-card">
       <div className="section-head">
@@ -729,7 +732,7 @@ function ResultPanel({ result, agentLabelsById }: { result: RunResult; agentLabe
       <div className="suggested-language">
         <div className="suggestion-title">
           <ClipboardCheck size={18} />
-          <span>Suggested fallback language</span>
+          <span>{suggestionLabel}</span>
         </div>
         <pre>{result.suggested_language}</pre>
       </div>

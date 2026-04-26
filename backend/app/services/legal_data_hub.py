@@ -28,14 +28,12 @@ class LegalDataHubClient:
             seen_ids: set[str] = set()
             async with httpx.AsyncClient(timeout=self.settings.legal_data_hub_timeout) as client:
                 for data_asset in self._data_assets():
-                    url = self._search_url(data_asset)
-                    body = _build_es_query(query)
-                    response = await client.post(url, json=body, headers=headers)
-                    response.raise_for_status()
-                    payload = response.json()
-                    hits = _extract_hits(payload)
+                    # Prefer semantic search; fall back to keyword search
+                    hits = await _semantic_search(client, self._base_url(), query, data_asset, headers)
+                    if not hits:
+                        hits = await _keyword_search(client, self._keyword_search_url(data_asset), query, headers)
                     for hit in hits:
-                        normalized = _normalize_es_result(hit, data_asset)
+                        normalized = _normalize_result(hit, data_asset)
                         hit_id = normalized.get("_id") or normalized.get("citation", "")
                         if hit_id and hit_id in seen_ids:
                             continue
@@ -83,14 +81,16 @@ class LegalDataHubClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _search_url(self, data_asset: str) -> str:
-        base = self.settings.legal_data_hub_base_url.rstrip("/")
+    def _base_url(self) -> str:
+        return self.settings.legal_data_hub_base_url.rstrip("/")
+
+    def _keyword_search_url(self, data_asset: str) -> str:
+        from urllib.parse import quote
+        encoded_asset = quote(data_asset, safe="")
         search_base = self.settings.legal_data_hub_search_path.strip() or "/api/search"
         if not search_base.startswith("/"):
             search_base = f"/{search_base}"
-        from urllib.parse import quote
-        encoded_asset = quote(data_asset, safe="")
-        return f"{base}{search_base}/{encoded_asset}/_search"
+        return f"{self._base_url()}{search_base}/{encoded_asset}/_search"
 
     def _data_assets(self) -> list[str]:
         return [
@@ -109,7 +109,7 @@ class LegalDataHubClient:
                 "Authorization": f"Bearer {self.settings.lda_secret}",
                 "Content-Type": "application/json",
             }
-        # basic — encode credentials in the header directly
+        # basic
         import base64
         creds = base64.b64encode(
             f"{self.settings.lda_client}:{self.settings.lda_secret}".encode()
@@ -117,7 +117,7 @@ class LegalDataHubClient:
         return {"Authorization": f"Basic {creds}", "Content-Type": "application/json"}
 
     async def _get_bearer_token(self) -> str:
-        """Fetch and cache an OAuth2 client_credentials bearer token."""
+        """Fetch and cache an OAuth2 bearer token using the LDA authorization_code grant."""
         if self._bearer_token and time.monotonic() < self._token_expires_at:
             return self._bearer_token
 
@@ -125,7 +125,7 @@ class LegalDataHubClient:
             response = await client.post(
                 self.settings.legal_data_hub_token_url,
                 data={
-                    "grant_type": "client_credentials",
+                    "grant_type": "authorization_code",
                     "client_id": self.settings.lda_client or "",
                     "client_secret": self.settings.lda_secret or "",
                 },
@@ -139,7 +139,6 @@ class LegalDataHubClient:
             raise ValueError(f"OAuth2 token response missing access_token: {data}")
 
         expires_in = float(data.get("expires_in", 3600))
-        # Refresh 60 s before expiry
         self._token_expires_at = time.monotonic() + expires_in - 60
         self._bearer_token = token
         return token
@@ -158,53 +157,87 @@ class LegalDataHubClient:
 
 
 # ------------------------------------------------------------------
-# Elasticsearch response helpers
+# Search helpers
 # ------------------------------------------------------------------
 
-def _build_es_query(query: str) -> dict[str, Any]:
-    return {
+async def _semantic_search(
+    client: httpx.AsyncClient,
+    base_url: str,
+    query: str,
+    data_asset: str,
+    headers: dict[str, str],
+) -> list[dict[str, Any]]:
+    """POST /api/semantic-search — preferred; returns natural-language ranked results."""
+    url = f"{base_url}/api/semantic-search"
+    body = {
+        "search_query": query,
+        "data_asset": data_asset,
+        "candidates": 5,
+        "filter": [],
+        "post_reranking": True,
+    }
+    try:
+        response = await client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+        return _extract_hits(payload)
+    except httpx.HTTPStatusError:
+        return []
+
+
+async def _keyword_search(
+    client: httpx.AsyncClient,
+    url: str,
+    query: str,
+    headers: dict[str, str],
+) -> list[dict[str, Any]]:
+    """POST /api/search/{data_asset}/_search — Elasticsearch DSL fallback."""
+    body = {
         "query": {
             "multi_match": {
                 "query": query,
-                "fields": ["content^2", "title^3", "text^2", "excerpt"],
+                "fields": ["content^2", "title^3", "text^2"],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
             }
         },
         "highlight": {
-            "fields": {
-                "content": {"number_of_fragments": 2, "fragment_size": 250},
-                "text": {"number_of_fragments": 2, "fragment_size": 250},
-            },
+            "fields": {"content": {"number_of_fragments": 2, "fragment_size": 250}},
             "pre_tags": [""],
             "post_tags": [""],
         },
         "size": 5,
-        "_source": True,
     }
+    response = await client.post(url, json=body, headers=headers)
+    response.raise_for_status()
+    return _extract_hits(response.json())
 
 
-def _extract_hits(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract hits from an Elasticsearch response or a plain list."""
+def _extract_hits(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return payload
     hits_wrapper = payload.get("hits", {})
     if isinstance(hits_wrapper, dict):
-        return hits_wrapper.get("hits", [])
-    # Some APIs return results at top level
-    return payload.get("results", [])
+        hits = hits_wrapper.get("hits", [])
+        if hits:
+            return hits
+    results = payload.get("results", payload.get("documents", []))
+    if isinstance(results, list):
+        return results
+    return []
 
 
-def _normalize_es_result(hit: dict[str, Any], data_asset: str) -> dict[str, Any]:
-    """Normalise an Elasticsearch hit to the internal evidence format."""
+def _normalize_result(hit: dict[str, Any], data_asset: str) -> dict[str, Any]:
+    """Normalise any Otto Schmidt hit format to the internal evidence format."""
+    # ES hit wrapper: { _id, _score, _source: {...}, highlight: {...} }
     source = hit.get("_source", hit)
     highlight = hit.get("highlight", {})
 
-    # Extract a readable excerpt from highlights or source content
-    highlight_texts = []
-    for field_fragments in highlight.values():
-        if isinstance(field_fragments, list):
-            highlight_texts.extend(field_fragments)
+    # Extract excerpt from highlights or source content
+    highlight_texts: list[str] = []
+    for fragments in highlight.values():
+        if isinstance(fragments, list):
+            highlight_texts.extend(str(f) for f in fragments)
     excerpt = " … ".join(highlight_texts[:2]) if highlight_texts else (
         str(source.get("content") or source.get("text") or source.get("excerpt") or "")[:400]
     )
@@ -213,15 +246,16 @@ def _normalize_es_result(hit: dict[str, Any], data_asset: str) -> dict[str, Any]
         source.get("title")
         or source.get("citation")
         or source.get("reference_number")
+        or source.get("aktenzeichen")
         or source.get("name")
         or hit.get("_id")
         or f"{data_asset} result"
     )
     url = source.get("url") or source.get("link")
-    confidence = hit.get("_score") or source.get("confidence") or source.get("score")
+    confidence = hit.get("_score") or hit.get("score") or source.get("confidence")
 
     normalized: dict[str, Any] = {
-        "_id": hit.get("_id"),
+        "_id": hit.get("_id") or hit.get("id"),
         "source": f"Otto Schmidt / Legal Data Hub — {data_asset}",
         "citation": str(title),
         "quote": excerpt or "Live Legal Data Hub result returned without excerpt text.",
@@ -233,7 +267,7 @@ def _normalize_es_result(hit: dict[str, Any], data_asset: str) -> dict[str, Any]
     if confidence is not None:
         normalized["confidence"] = float(confidence)
 
-    # Keep all source fields for downstream use
+    # Preserve all source fields for downstream use
     normalized.update({k: v for k, v in source.items() if k not in normalized})
     return normalized
 

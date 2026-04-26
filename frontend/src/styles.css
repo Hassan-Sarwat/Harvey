@@ -955,6 +955,7 @@ textarea:focus {
   font-size: 18px;
   line-height: 1.55;
   margin: 0 0 18px;
+  white-space: pre-wrap;
 }
 
 .answer-grid {

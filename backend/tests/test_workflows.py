@@ -1,6 +1,17 @@
+import pytest
+
 from app.agents.base import ReviewContext
+from app.workflows import legal_qa as legal_qa_module
 from app.workflows.legal_qa import LegalQARequest, LegalQAWorkflow
 from app.workflows.review_contract import ContractReviewWorkflow
+
+
+@pytest.fixture(autouse=True)
+def disable_openai_answers(monkeypatch):
+    async def _empty_openai_answer(**_kwargs):
+        return ""
+
+    monkeypatch.setattr(legal_qa_module, "_openai_answer", _empty_openai_answer)
 
 
 async def test_contract_review_workflow_returns_aggregate():
@@ -39,3 +50,51 @@ async def test_legal_qa_workflow_references_specific_internal_playbook_rule():
         "severity": "high",
         "approved_fix": "Processor shall promptly notify BMW Group and provide reasonable assistance with data subject requests without separate charge unless BMW Group approves an exceptional fee.",
     }
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Summarize the DPA playbook",
+        "Explain the DPA playbook for non legal people",
+        "Summarize the BMW Group DPA negotiation playbook",
+    ],
+)
+async def test_legal_qa_workflow_summarizes_complete_dpa_playbook(question):
+    openai_calls: list[dict] = []
+
+    async def _generated_answer(**kwargs):
+        openai_calls.append(kwargs)
+        return "OpenAI generated DPA playbook summary"
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(legal_qa_module, "_openai_answer", _generated_answer)
+    try:
+        result = await LegalQAWorkflow().run(
+            LegalQARequest(question=question, use_case="ask_donna", contract_type="data_protection")
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert result.answer_kind == "playbook_summary"
+    assert result.playbook_row_count == 8
+    assert result.escalate is False
+    assert len(result.company_basis) == 8
+    assert result.ai_generated is True
+    assert result.summary == "OpenAI generated DPA playbook summary"
+    assert openai_calls[0]["question"] == question
+    assert len(openai_calls[0]["all_rows"]) == 8
+
+
+async def test_legal_qa_openai_unavailable_does_not_use_fixed_playbook_summary():
+    result = await LegalQAWorkflow().run(
+        LegalQARequest(question="Summarize the DPA playbook", use_case="ask_donna", contract_type="data_protection")
+    )
+
+    assert result.answer_kind == "playbook_summary"
+    assert result.playbook_row_count == 8
+    assert result.escalate is False
+    assert len(result.company_basis) == 8
+    assert result.ai_generated is False
+    assert "OpenAI answer generator is unavailable" in result.summary
+    assert "DPA is the privacy contract" not in result.summary

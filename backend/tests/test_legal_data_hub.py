@@ -86,18 +86,19 @@ async def test_legal_data_hub_calls_otto_schmidt_api_when_credentials_are_config
     token_calls = [c for c in all_calls if "token" in c["url"]]
     assert token_calls, "Expected an OAuth2 token request"
     token_data = token_calls[0].get("data", {})
-    assert token_data.get("grant_type") == "client_credentials"
+    assert token_data.get("grant_type") == "authorization_code"
     assert token_data.get("client_id") == "client-id"
     assert token_data.get("client_secret") == "client-secret"
 
     # Search was made against both data assets with bearer token
-    search_calls = [c for c in all_calls if "_search" in c["url"]]
-    assert len(search_calls) == 2, f"Expected 2 search calls (one per asset), got: {[c['url'] for c in search_calls]}"
+    # Semantic search is attempted first; keyword search is the fallback.
+    semantic_calls = [c for c in all_calls if "semantic-search" in c["url"]]
+    keyword_calls = [c for c in all_calls if "_search" in c["url"]]
+    search_calls = semantic_calls or keyword_calls
+    assert len(search_calls) == 2, f"Expected 2 search calls (one per asset), got: {[c['url'] for c in all_calls]}"
     for call in search_calls:
         headers = call.get("headers", {})
         assert headers.get("Authorization") == "Bearer test-bearer-token"
-        assert "/api/search/" in call["url"]
-        assert "/_search" in call["url"]
 
     # After test, clear cache so other tests are not affected
     get_settings.cache_clear()
