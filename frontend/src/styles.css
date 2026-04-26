@@ -667,26 +667,48 @@ button {
 }
 
 .mode-switch-control {
-  display: inline-flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   align-items: center;
-  padding: 3px;
-  min-height: 42px;
+  width: min(100%, 340px);
+  padding: 4px;
+  min-height: 44px;
   border: 1px solid #cfd7e3;
-  border-radius: 2px;
-  background: #eef4fb;
-  gap: 3px;
+  border-radius: 999px;
+  background: #e8eff8;
+  box-shadow: inset 0 1px 2px rgba(6, 26, 53, 0.08);
+}
+
+.mode-switch-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 2);
+  height: calc(100% - 8px);
+  border: 1px solid #d8e1ed;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(6, 26, 53, 0.14);
+  transition: transform 180ms ease;
+}
+
+.mode-switch-control.contract-active .mode-switch-thumb {
+  transform: translateX(100%);
 }
 
 .mode-switch-option {
+  position: relative;
+  z-index: 1;
   border: 0;
-  border-radius: 2px;
   min-height: 34px;
-  padding: 0 13px;
+  padding: 0 14px;
   color: #5c687e;
   background: transparent;
-  font-weight: 800;
+  font-weight: 900;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  transition: color 160ms ease;
 }
 
 .mode-switch-option:hover {
@@ -695,8 +717,6 @@ button {
 
 .mode-switch-option.active {
   color: #073b7a;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgb(16 34 61 / 12%);
 }
 
 .mode-switch-option:focus-visible {

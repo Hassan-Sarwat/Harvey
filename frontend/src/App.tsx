@@ -136,13 +136,6 @@ function runningAgentSteps(mode: AskMode): RunningAgentStep[] {
         status: "queued",
       },
       {
-        id: "legal_checker",
-        label: "German Legal Checker",
-        agent: "Legal Evidence",
-        summary: "Checking German/EU evidence and Otto Schmidt sources where needed.",
-        status: "queued",
-      },
-      {
         id: "risk_aggregator",
         label: "Risk Aggregator",
         agent: "Decision Layer",
@@ -476,13 +469,7 @@ function AskDonnaView(props: {
 
           <div className="composer">
             <div className="composer-toolbar">
-              <label className="mode-select">
-                <span>Mode</span>
-                <select value={props.mode} onChange={(event) => props.setMode(event.target.value as AskMode)}>
-                  <option value="general_question">General question</option>
-                  <option value="contract_review">Contract review</option>
-                </select>
-              </label>
+              <ModeSwitch mode={props.mode} setMode={props.setMode} />
               {props.mode === "contract_review" ? (
                 <button
                   className={props.isFinalVersion ? "final-toggle selected" : "final-toggle"}
@@ -525,6 +512,33 @@ function AskDonnaView(props: {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ModeSwitch({ mode, setMode }: { mode: AskMode; setMode: (mode: AskMode) => void }) {
+  const options: Array<{ value: AskMode; label: string }> = [
+    { value: "general_question", label: "General question" },
+    { value: "contract_review", label: "Contract review" },
+  ];
+
+  return (
+    <div className="mode-switch" aria-label="Mode">
+      <span>Mode</span>
+      <div className={`mode-switch-control ${mode === "contract_review" ? "contract-active" : "general-active"}`} role="group">
+        <span className="mode-switch-thumb" aria-hidden="true" />
+        {options.map((option) => (
+          <button
+            aria-pressed={mode === option.value}
+            className={mode === option.value ? "mode-switch-option active" : "mode-switch-option"}
+            key={option.value}
+            onClick={() => setMode(option.value)}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
