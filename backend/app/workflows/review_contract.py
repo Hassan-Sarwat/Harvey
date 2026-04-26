@@ -3,7 +3,6 @@ from __future__ import annotations
 from app.agents.base import AgentResult, ReviewContext
 from app.agents.completeness_checker import CompletenessCheckerAgent
 from app.agents.contract_understanding import ContractUnderstandingAgent
-from app.agents.legal_checker import LegalCheckerAgent
 from app.agents.playbook_checker import PlaybookCheckerAgent
 from app.agents.risk_aggregator import RiskAggregator
 
@@ -14,7 +13,6 @@ class ContractReviewWorkflow:
             ContractUnderstandingAgent(),
             CompletenessCheckerAgent(),
             PlaybookCheckerAgent(),
-            LegalCheckerAgent(),
         ]
         self.aggregator = RiskAggregator()
 

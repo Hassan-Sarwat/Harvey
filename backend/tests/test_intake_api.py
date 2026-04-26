@@ -38,7 +38,7 @@ async def test_intake_analyze_returns_louis_frontend_shape(monkeypatch):
     )
 
     assert payload["agent_routing_mode"] == "auto"
-    assert "legal_checker" in payload["routed_agents"]
+    assert payload["routed_agents"] == ["contract_understanding", "completeness_checker", "playbook_checker", "risk_aggregator"]
     assert payload["matter_summary"]["agreement_type"] == "Data processing agreement / privacy addendum"
     assert payload["agent_steps"]
     assert payload["legal_sources"][0]["source"] == "Otto Schmidt / Legal Data Hub"

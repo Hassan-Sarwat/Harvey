@@ -7,10 +7,10 @@ from tempfile import SpooledTemporaryFile
 
 from starlette.datastructures import UploadFile
 
-from app.agents.legal_checker import LegalDataHubClient
 from app.api import contracts
 from app.services.contract_repository import ContractRepository
 from app.services.escalation_repository import EscalationRepository
+from app.services.legal_data_hub import LegalDataHubClient
 from app.services.review_storage import DocumentStore
 
 

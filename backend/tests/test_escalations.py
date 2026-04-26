@@ -7,10 +7,10 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.agents.base import AgentResult, ContractTrigger, Finding, RulingReference, Severity, Suggestion
-from app.agents.legal_checker import LegalDataHubClient
 from app.api import contracts, dashboard, escalations
 from app.services.contract_repository import ContractRepository
 from app.services.escalation_repository import EscalationAlreadyDecidedError, EscalationRepository
+from app.services.legal_data_hub import LegalDataHubClient
 from app.services.review_storage import DocumentStore
 
 
@@ -22,7 +22,7 @@ def test_escalation_repository_tracks_denied_as_positive_escalation(tmp_path):
     assert escalation["ticket_id"].startswith("TCK-")
     assert escalation["status"] == "pending_legal"
     assert escalation["highest_severity"] == "blocker"
-    assert escalation["source_agents"] == ["playbook_checker", "legal_checker"]
+    assert escalation["source_agents"] == ["playbook_checker"]
 
     decided = repository.decide_escalation(
         escalation_id=escalation["id"],
@@ -40,7 +40,7 @@ def test_escalation_repository_tracks_denied_as_positive_escalation(tmp_path):
     assert metrics["positive_escalations"] == 1
     assert metrics["false_escalations"] == 0
     assert metrics["top_positive_escalation_agent"]["agent_name"] == "playbook_checker"
-    assert {item["agent_name"] for item in metrics["per_agent"]} == {"playbook_checker", "legal_checker"}
+    assert {item["agent_name"] for item in metrics["per_agent"]} == {"playbook_checker"}
 
 
 def test_escalation_repository_tracks_accepted_as_false_escalation(tmp_path):
@@ -227,24 +227,10 @@ def _escalating_result() -> AgentResult:
         ruling=liability_ruling,
         requires_escalation=True,
     )
-    legal_trigger = ContractTrigger(text="Supplier waives all data subject rights.", start=0, end=39)
-    legal_finding = Finding(
-        id="illegal-data-subject-right-waiver",
-        title="Potentially unlawful data subject rights waiver",
-        description="Data subject rights cannot be waived.",
-        severity=Severity.BLOCKER,
-        trigger=legal_trigger,
-        ruling=RulingReference(
-            source="Otto Schmidt / Legal Data Hub fallback",
-            citation="GDPR Art. 12-22",
-            quote="Data subjects have statutory rights.",
-        ),
-        requires_escalation=True,
-    )
     return AgentResult(
         agent_name="risk_aggregator",
         summary="Aggregated agent findings and determined escalation status.",
-        findings=[playbook_finding, legal_finding],
+        findings=[playbook_finding],
         suggestions=[
             Suggestion(
                 finding_id="unlimited-liability",
@@ -261,14 +247,6 @@ def _escalating_result() -> AgentResult:
                     "findings": [playbook_finding.model_dump(mode="json")],
                     "suggestions": [],
                     "confidence": 0.7,
-                    "requires_escalation": True,
-                    "metadata": {},
-                },
-                {
-                    "agent_name": "legal_checker",
-                    "findings": [legal_finding.model_dump(mode="json")],
-                    "suggestions": [],
-                    "confidence": 0.6,
                     "requires_escalation": True,
                     "metadata": {},
                 },

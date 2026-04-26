@@ -88,11 +88,6 @@ AGENTS = [
         "description": "Checks the draft against the BMW playbook files in data/playbook.",
     },
     {
-        "id": "legal_checker",
-        "label": "German Legal Checker",
-        "description": "Uses Otto Schmidt / Legal Data Hub evidence or clearly marked fallback evidence.",
-    },
-    {
         "id": "risk_aggregator",
         "label": "Risk Aggregator",
         "description": "Combines specialist findings into an escalation recommendation.",
@@ -542,10 +537,7 @@ def _infer_contract_type(text: str) -> str:
 
 
 def _auto_route_agents(text: str, contract_type: str) -> list[str]:
-    routed = ["contract_understanding", "completeness_checker", "playbook_checker", "risk_aggregator"]
-    if contract_type in {"data_protection", "litigation"} or any(term in text.lower() for term in ("gdpr", "liability", "waive")):
-        routed.insert(3, "legal_checker")
-    return routed
+    return ["contract_understanding", "completeness_checker", "playbook_checker", "risk_aggregator"]
 
 
 def _auto_sources(contract_type: str, legal_basis: list[dict[str, Any]], uploaded_texts: list[dict[str, str]]) -> list[str]:
