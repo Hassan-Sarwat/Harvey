@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.agents.base import AgentResult, ReviewContext
+from app.agents.completeness_checker import CompletenessCheckerAgent
 from app.agents.contract_understanding import ContractUnderstandingAgent
 from app.agents.contract_triage import ContractTriageAgent
 from app.agents.legal_checker import LegalCheckerAgent
@@ -16,6 +17,7 @@ class ContractReviewWorkflow:
             PlaybookCheckerAgent(),
             LegalCheckerAgent(),
         ]
+        self.completeness_agent = CompletenessCheckerAgent()
         self.aggregator = RiskAggregator()
 
     async def run(self, context: ReviewContext) -> AgentResult:
@@ -28,6 +30,9 @@ class ContractReviewWorkflow:
                 if isinstance(inferred_type, str) and inferred_type:
                     working_context = working_context.model_copy(update={"contract_type": inferred_type})
             results.append(result)
+        preliminary = self.aggregator.combine(results)
+        if preliminary.requires_escalation:
+            results.append(await self.completeness_agent.run(working_context))
         for result in results:
             result.metadata["passed"] = _agent_passed(result)
         aggregate = self.aggregator.combine(results)

@@ -1,4 +1,5 @@
 from app.agents.base import ReviewContext
+from app.agents.completeness_checker import CompletenessCheckerAgent
 from app.agents.contract_understanding import ContractUnderstandingAgent
 from app.agents.playbook_checker import PlaybookCheckerAgent
 
@@ -33,3 +34,49 @@ async def test_playbook_checker_records_trigger_and_exact_playbook_ruling():
     assert liability.ruling is not None
     assert liability.ruling.citation == "LT-003 - Unlimited liability escalation"
     assert liability.ruling.quote == "Unlimited liability must be escalated to legal."
+
+
+async def test_completeness_checker_flags_missing_referenced_attachment():
+    result = await CompletenessCheckerAgent().run(
+        ReviewContext(
+            contract_id="c1",
+            contract_text="",
+            user_question="Please escalate this to Legal.",
+            metadata={
+                "uploaded_documents": [
+                    {
+                        "filename": "main-contract.txt",
+                        "text": "Effective Date: 1 January 2026. BMW services are governed by Attachment 8.",
+                    }
+                ]
+            },
+        )
+    )
+
+    assert result.requires_escalation is False
+    assert result.metadata["status"] == "needs_business_input"
+    assert any(finding.id == "missing-required-document-annex8" for finding in result.findings)
+
+
+async def test_completeness_checker_matches_attachment_from_uploaded_heading():
+    result = await CompletenessCheckerAgent().run(
+        ReviewContext(
+            contract_id="c1",
+            contract_text="",
+            metadata={
+                "uploaded_documents": [
+                    {
+                        "filename": "main-contract.txt",
+                        "text": "Effective Date: 1 January 2026. BMW services are governed by Annex 3.",
+                    },
+                    {
+                        "filename": "service-levels.txt",
+                        "text": "Annex 3 - Service Levels\nThe supplier shall meet the agreed service levels.",
+                    },
+                ]
+            },
+        )
+    )
+
+    assert result.metadata["status"] == "complete"
+    assert not result.findings

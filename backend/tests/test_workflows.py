@@ -24,7 +24,7 @@ async def test_contract_review_workflow_returns_aggregate():
 
     assert result.agent_name == "risk_aggregator"
     assert result.requires_escalation is True
-    assert result.metadata["agent_count"] == 4
+    assert result.metadata["agent_count"] == 5
     assert len(result.metadata["escalation_conditions"]) == 4
 
 
@@ -76,6 +76,47 @@ async def test_contract_review_escalates_when_matter_not_covered_by_playbook():
 
     assert result.requires_escalation is True
     assert any(finding.id == "matter-not-covered-by-playbook" for finding in result.findings)
+
+
+async def test_contract_review_runs_completeness_only_for_legal_escalations():
+    clean_result = await ContractReviewWorkflow().run(
+        ReviewContext(
+            contract_id="c1",
+            contract_type="data_protection",
+            contract_text="Effective Date: 1 January 2026. BMW services are governed by Annex 3.",
+            metadata={
+                "uploaded_documents": [
+                    {
+                        "filename": "main-contract.txt",
+                        "text": "Effective Date: 1 January 2026. BMW services are governed by Annex 3.",
+                    }
+                ]
+            },
+        )
+    )
+
+    assert clean_result.requires_escalation is False
+    assert all(item["agent_name"] != "completeness_checker" for item in clean_result.metadata["agent_results"])
+
+    risky_result = await ContractReviewWorkflow().run(
+        ReviewContext(
+            contract_id="c2",
+            contract_type="litigation",
+            contract_text="Effective Date: 1 January 2026. BMW accepts unlimited liability. Services are governed by Annex 3.",
+            metadata={
+                "uploaded_documents": [
+                    {
+                        "filename": "main-contract.txt",
+                        "text": "Effective Date: 1 January 2026. BMW accepts unlimited liability. Services are governed by Annex 3.",
+                    }
+                ]
+            },
+        )
+    )
+
+    assert risky_result.requires_escalation is True
+    completeness = next(item for item in risky_result.metadata["agent_results"] if item["agent_name"] == "completeness_checker")
+    assert completeness["metadata"]["status"] == "needs_business_input"
 
 
 async def test_legal_qa_workflow_returns_company_and_legal_basis():

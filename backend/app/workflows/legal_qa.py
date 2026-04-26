@@ -114,6 +114,8 @@ Your responsibilities:
 
 Style:
 - Reference BMW playbook rules by their ID (e.g. DPA-001) when citing BMW's position
+- For legal evidence, cite the provided numbered sources exactly as bracketed markers (e.g. [1], [2]) after the supported sentence; the UI renders these as German-style footnotes
+- Do not invent citation numbers that are not present in the provided legal evidence
 - Use bullet points for lists of issues or rules
 - Keep answers focused and practical — this is an operational tool, not a textbook
 - Draw only on the playbook and legal evidence provided below; do not invent BMW policies
@@ -380,33 +382,14 @@ _TERMINOLOGY_SIGNALS = {
 def _detect_query_intent(question: str, use_case: str) -> tuple[bool, bool]:
     """Return (want_playbook, want_legal_hub).
 
-    Contract review and intake always use both sources.
-    General questions are routed to the source(s) the question clearly targets.
-    If a question mentions legal terms but also has contract/negotiation context
-    (e.g. "can a supplier waive GDPR rights?"), both sources are used because
-    the playbook position is relevant alongside the legal answer.
-    If a question is a pure statute lookup with no contract context, only the
-    legal hub is queried.
+    Contract review, intake, and general Ask Donna questions always try both
+    BMW playbook context and Otto Schmidt / Legal Data Hub evidence. The UI
+    should show the Legal Data Hub source even when the user did not explicitly
+    ask for "Otto Schmidt" or "legal sources".
     """
     if use_case in ("legal_intake", "contract_review"):
         return True, True
 
-    q = question.lower()
-    wants_playbook = any(signal in q for signal in _PLAYBOOK_SIGNALS)
-    wants_legal = any(signal in q for signal in _LEGAL_SIGNALS)
-    wants_contract_context = any(signal in q for signal in _CONTRACT_NEGOTIATION_SIGNALS)
-
-    # Explicitly BMW/playbook-only question
-    if wants_playbook and not wants_legal:
-        return True, False
-
-    # Legal signal present — include playbook if there is also contract/negotiation context
-    if wants_legal and not wants_playbook:
-        if wants_contract_context:
-            return True, True
-        return False, True
-
-    # Unclear or both mentioned — use both (safest default)
     return True, True
 
 

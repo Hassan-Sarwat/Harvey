@@ -378,8 +378,8 @@ function AskDonnaView(props: {
               <div className={`chat-message ${item.role}`} key={`${item.role}-${index}`}>
                 <MessageAvatar role={item.role} />
                 <div className="message-bubble">
-                  {item.role === "assistant" ? <MarkdownMessage content={item.content} /> : <p>{item.content}</p>}
-                  {item.result ? <ChatResultSummary result={item.result} /> : null}
+                  {item.role === "assistant" && item.result ? <ChatResultSummary result={item.result} /> : null}
+                  {item.role === "assistant" ? <FootnotedAnswer content={item.content} result={item.result} /> : <p>{item.content}</p>}
                 </div>
               </div>
             ))}
@@ -437,7 +437,7 @@ function AskDonnaView(props: {
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") props.onAnalyze();
               }}
-              rows={4}
+              rows={3}
               placeholder={placeholder}
             />
             <UploadBox files={props.files} setFiles={props.setFiles} />
@@ -486,22 +486,178 @@ function MarkdownMessage({ content }: { content: string }) {
 }
 
 function ChatResultSummary({ result }: { result: RunResult }) {
-  const sourceSummary = formatSourceSummary(result.source_usage ?? []);
+  const sources = result.source_usage ?? [];
   return (
     <div className="chat-result-summary">
-      <span className={result.contract_status === "approved" ? "status-pill approved" : result.contract_status === "pending_legal" ? "status-pill warning" : "status-pill"}>
-        {result.contract_status ? result.contract_status.replace("_", " ") : result.escalation_state}
-      </span>
-      {sourceSummary ? <small>Sources: {sourceSummary}</small> : null}
+      <div className="chat-result-meta">
+        <span className={statusPillClass(result.contract_status)}>
+          {result.contract_status ? result.contract_status.replace("_", " ") : result.escalation_state}
+        </span>
+        <span className="status-pill source-count">
+          <Database size={15} />
+          {sources.length ? `${sources.length} source group${sources.length === 1 ? "" : "s"}` : "No sources recorded"}
+        </span>
+      </div>
     </div>
   );
 }
 
-function formatSourceSummary(sources: NonNullable<RunResult["source_usage"]>) {
-  const labels = sources.map((source) => source.label).filter(Boolean);
-  if (!labels.length) return "";
-  if (labels.length <= 3) return labels.join(", ");
-  return `${labels.slice(0, 3).join(", ")} +${labels.length - 3} more`;
+function statusPillClass(status?: RunResult["contract_status"]) {
+  if (status === "approved") return "status-pill approved";
+  if (status === "pending_legal") return "status-pill warning";
+  if (status === "needs_business_input") return "status-pill needs-input";
+  return "status-pill";
+}
+
+function FootnotedAnswer({ content, result }: { content: string; result?: RunResult }) {
+  const footnotes = result ? buildCitationFootnotes(content, result) : [];
+  const linkedContent = result ? linkCitationNumbers(content, result.id, new Set(footnotes.map((footnote) => footnote.number))) : content;
+  return (
+    <>
+      <MarkdownMessage content={linkedContent} />
+      {result ? <CitationFootnotes resultId={result.id} footnotes={footnotes} sourceGroups={result.source_usage ?? []} /> : null}
+    </>
+  );
+}
+
+type CitationFootnote = {
+  number: string;
+  title: string;
+  source?: string;
+  excerpt?: string;
+  url?: string;
+  fallback?: boolean;
+  fallback_reason?: string;
+  groupLabel?: string;
+};
+
+function CitationFootnotes({
+  resultId,
+  footnotes,
+  sourceGroups
+}: {
+  resultId: string;
+  footnotes: CitationFootnote[];
+  sourceGroups: NonNullable<RunResult["source_usage"]>;
+}) {
+  if (!footnotes.length && !sourceGroups.length) return null;
+  return (
+    <aside className="citation-footnotes" aria-label="Quellen und Fußnoten">
+      <div className="citation-footnotes-head">
+        <strong>Quellen / Fußnoten</strong>
+        {sourceGroups.length ? <span>{sourceGroups.map((source) => source.label).join(", ")}</span> : null}
+      </div>
+      {footnotes.length ? (
+        <ol>
+          {footnotes.map((footnote) => (
+            <li id={sourceAnchorId(resultId, footnote.number)} key={footnote.number}>
+              <span className="footnote-number">{footnote.number}</span>
+              <div>
+                <strong>{footnote.title}</strong>
+                {footnote.source ? <small>{footnote.source}{footnote.groupLabel ? ` · ${footnote.groupLabel}` : ""}</small> : null}
+                {footnote.excerpt ? <p>{footnote.excerpt}</p> : null}
+                {footnote.fallback ? <span className="source-warning">Fallback evidence</span> : null}
+                {footnote.url ? (
+                  <a href={footnote.url} target="_blank" rel="noreferrer">
+                    Open source <ExternalLink size={13} />
+                  </a>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p>Donna used {sourceGroups.length} source group{sourceGroups.length === 1 ? "" : "s"}, but the answer does not contain numbered footnote markers.</p>
+      )}
+    </aside>
+  );
+}
+
+function buildCitationFootnotes(content: string, result: RunResult): CitationFootnote[] {
+  const citedNumbers = extractCitationNumbers(content);
+  if (!citedNumbers.length) return [];
+
+  const byNumber = new Map<string, CitationFootnote>();
+  for (const group of result.source_usage ?? []) {
+    for (const item of group.items) {
+      const number = citationNumberFromTitle(item.title);
+      if (!number || byNumber.has(number)) continue;
+      byNumber.set(number, {
+        number,
+        title: item.title?.replace(/^\[\d+\]\s*/, "") || item.source || `Source ${number}`,
+        source: item.source,
+        excerpt: item.excerpt,
+        url: item.url,
+        fallback: item.fallback,
+        fallback_reason: item.fallback_reason,
+        groupLabel: group.label
+      });
+    }
+  }
+
+  for (const item of result.legal_sources ?? []) {
+    const number = citationNumberFromTitle(item.title);
+    if (!number || byNumber.has(number)) continue;
+    byNumber.set(number, {
+      number,
+      title: item.title.replace(/^\[\d+\]\s*/, ""),
+      source: item.source,
+      excerpt: item.excerpt,
+      url: item.url,
+      fallback: item.retrieval_mode === "fallback",
+      fallback_reason: item.fallback_reason,
+      groupLabel: "Otto Schmidt"
+    });
+  }
+
+  return citedNumbers.map((number) => byNumber.get(number) ?? {
+    number,
+    title: `Source ${number}`,
+    source: "Referenced in Donna's answer, but no matching source record was returned.",
+  });
+}
+
+function extractCitationNumbers(content: string) {
+  const seen = new Set<string>();
+  const numbers: string[] = [];
+  for (const match of content.matchAll(/\[(\d+)\]/g)) {
+    const number = match[1];
+    if (seen.has(number)) continue;
+    seen.add(number);
+    numbers.push(number);
+  }
+  return numbers;
+}
+
+function linkCitationNumbers(content: string, resultId: string, availableNumbers: Set<string>) {
+  return content.replace(/\[(\d+)\]/g, (match, number: string) => {
+    if (!availableNumbers.has(number)) return match;
+    return `[${toSuperscript(number)}](#${sourceAnchorId(resultId, number)})`;
+  });
+}
+
+function citationNumberFromTitle(title?: string) {
+  return title?.match(/^\[(\d+)\]/)?.[1];
+}
+
+function sourceAnchorId(resultId: string, number: string) {
+  return `donna-footnote-${resultId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${number}`;
+}
+
+function toSuperscript(value: string) {
+  const digits: Record<string, string> = {
+    "0": "⁰",
+    "1": "¹",
+    "2": "²",
+    "3": "³",
+    "4": "⁴",
+    "5": "⁵",
+    "6": "⁶",
+    "7": "⁷",
+    "8": "⁸",
+    "9": "⁹",
+  };
+  return value.split("").map((char) => digits[char] ?? char).join("");
 }
 
 function Selector({ title, icon, items, selected, onToggle }: { title: string; icon: ReactNode; items: ConfigItem[]; selected: string[]; onToggle: (id: string) => void }) {

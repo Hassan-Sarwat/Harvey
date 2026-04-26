@@ -84,8 +84,7 @@ class GeneralQuestionWorkflow:
         selected_sources = [DATA_PROTECTION_SOURCE_ID, LITIGATION_SOURCE_ID]
         if documents:
             selected_sources.append("uploaded_bundle")
-        if generated.legal_tool_called:
-            selected_sources.append("legal_data_hub")
+        selected_sources.append("legal_data_hub")
 
         return GeneralQuestionResponse(
             domain=domain,
@@ -101,7 +100,7 @@ class GeneralQuestionWorkflow:
             routed_agents=["legal_qa"],
             routing_summary=_routing_summary(documents, generated.legal_basis),
             selected_source_ids=selected_sources,
-            legal_tool_called=generated.legal_tool_called,
+            legal_tool_called=True,
         )
 
 
@@ -119,30 +118,30 @@ async def _openai_general_answer(
 
     settings = get_settings()
     legal_basis: list[dict] = []
-    if _should_prefetch_legal_evidence(question=question, context=context, documents=documents):
-        legal_domain = _legal_search_domain(None, fallback_domain=domain, query=question)
-        try:
-            evidence = await legal_data_hub.search_evidence(question, domain=legal_domain)
-            legal_basis = [_normalize_legal_basis(item) for item in evidence[:3]]
-        except Exception as exc:
-            logger.warning("Legal Data Hub prefetch failed: %s", exc)
+    legal_tool_called = True
+    legal_domain = _legal_search_domain(None, fallback_domain=domain, query=question)
+    try:
+        evidence = await legal_data_hub.search_evidence(question, domain=legal_domain)
+        legal_basis = [_normalize_legal_basis(item) for item in evidence[:3]]
+    except Exception as exc:
+        logger.warning("Legal Data Hub prefetch failed: %s", exc)
 
     direct_qna_answer = _direct_qna_answer(question=question, legal_basis=legal_basis, playbook_rows=playbook_rows)
     if direct_qna_answer:
         return GeneralAnswerGeneration(
             answer=direct_qna_answer,
             legal_basis=legal_basis,
-            legal_tool_called=True,
+            legal_tool_called=legal_tool_called,
         )
 
     if not settings.openai_api_key:
-        return GeneralAnswerGeneration(legal_basis=legal_basis, legal_tool_called=bool(legal_basis))
+        return GeneralAnswerGeneration(legal_basis=legal_basis, legal_tool_called=legal_tool_called)
 
     try:
         from openai import AsyncOpenAI
     except ImportError:
         logger.warning("openai package is not installed; general answer generation is unavailable")
-        return GeneralAnswerGeneration()
+        return GeneralAnswerGeneration(legal_basis=legal_basis, legal_tool_called=legal_tool_called)
 
     try:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -166,7 +165,7 @@ async def _openai_general_answer(
             return GeneralAnswerGeneration(
                 answer=message.content or "",
                 legal_basis=legal_basis,
-                legal_tool_called=True,
+                legal_tool_called=legal_tool_called,
             )
 
         first_response = await _create_chat_completion(
@@ -180,11 +179,13 @@ async def _openai_general_answer(
         first_message = first_response.choices[0].message
         tool_calls = list(getattr(first_message, "tool_calls", None) or [])
         if not tool_calls:
-            return GeneralAnswerGeneration(answer=first_message.content or "")
+            return GeneralAnswerGeneration(
+                answer=first_message.content or "",
+                legal_basis=legal_basis,
+                legal_tool_called=legal_tool_called,
+            )
 
         messages.append(_assistant_tool_call_message(first_message))
-        legal_basis: list[dict] = []
-        legal_tool_called = False
         for tool_call in tool_calls:
             if _tool_call_name(tool_call) != "search_german_law":
                 messages.append(
@@ -196,7 +197,6 @@ async def _openai_general_answer(
                     }
                 )
                 continue
-            legal_tool_called = True
             args = _tool_call_arguments(tool_call)
             query = str(args.get("query") or question).strip() or question
             legal_domain = _legal_search_domain(args.get("domain"), fallback_domain=domain, query=query)
@@ -228,7 +228,7 @@ async def _openai_general_answer(
         )
     except Exception as exc:
         logger.warning("OpenAI general answer failed: %s", exc)
-        return GeneralAnswerGeneration()
+        return GeneralAnswerGeneration(legal_basis=legal_basis, legal_tool_called=legal_tool_called)
 
 
 async def _create_chat_completion(

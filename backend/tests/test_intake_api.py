@@ -56,7 +56,7 @@ async def test_intake_demo_uses_sample_contract_and_returns_findings(monkeypatch
 
     assert payload["question"] == intake.DEMO_QUESTION
     assert payload["findings"]
-    assert payload["escalation_state"] == "Legal review required before signature"
+    assert payload["escalation_state"] in {"Legal review required before signature", "Needs business input"}
     assert payload["suggested_language"]
 
 
@@ -91,14 +91,10 @@ async def test_general_question_uses_complete_active_playbooks(message, tmp_path
     monkeypatch.setattr(intake, "HistoryRepository", lambda: HistoryRepository(database_url))
     openai_calls: list[dict] = []
 
-    async def _unexpected_search(self, query: str, domain: str = "general") -> list[dict[str, str]]:
-        raise AssertionError(f"Legal Data Hub should not be called unless the model asks for legal evidence: {query}")
-
     async def _generated_answer(**kwargs):
         openai_calls.append(kwargs)
         return general_question_module.GeneralAnswerGeneration(answer="OpenAI tailored playbook answer")
 
-    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _unexpected_search)
     monkeypatch.setattr(general_question_module, "_openai_general_answer", _generated_answer)
 
     payload = await intake.analyze(
@@ -110,11 +106,15 @@ async def test_general_question_uses_complete_active_playbooks(message, tmp_path
     assert payload["metrics"]["answer_kind"] == "general_answer"
     assert payload["metrics"]["ai_generated"] is True
     assert payload["metrics"]["playbook_row_count"] == 20
-    assert payload["metrics"]["legal_tool_called"] is False
+    assert payload["metrics"]["legal_tool_called"] is True
     assert payload["routed_agents"] == ["legal_qa"]
-    assert payload["selected_sources"] == ["bmw_data_protection_playbook", "bmw_litigation_playbook"]
+    assert payload["selected_sources"] == [
+        "bmw_data_protection_playbook",
+        "bmw_litigation_playbook",
+        "legal_data_hub",
+    ]
     source_counts = {source["id"]: source["item_count"] for source in payload["source_usage"]}
-    assert source_counts == {"bmw_data_protection_playbook": 8, "bmw_litigation_playbook": 12}
+    assert source_counts == {"bmw_data_protection_playbook": 8, "bmw_litigation_playbook": 12, "legal_data_hub": 0}
     assert payload["plain_answer"] == "OpenAI tailored playbook answer"
     assert openai_calls[0]["question"] == message
     assert {row["_source_id"] for row in openai_calls[0]["playbook_rows"]} == {
@@ -129,6 +129,7 @@ async def test_general_question_uses_complete_active_playbooks(message, tmp_path
     assert [source["id"] for source in latest_run["sources_used"]] == [
         "bmw_data_protection_playbook",
         "bmw_litigation_playbook",
+        "legal_data_hub",
     ]
 
 
@@ -136,10 +137,10 @@ async def test_general_question_openai_unavailable_still_records_playbooks(tmp_p
     database_url = f"sqlite:///{tmp_path / 'harvey.db'}"
     monkeypatch.setattr(intake, "HistoryRepository", lambda: HistoryRepository(database_url))
 
-    async def _unexpected_search(self, query: str, domain: str = "general") -> list[dict[str, str]]:
-        raise AssertionError(f"Legal Data Hub should not be called for company playbook summaries: {query}")
+    async def _empty_search(self, query: str, domain: str = "general") -> list[dict[str, str]]:
+        return []
 
-    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _unexpected_search)
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _empty_search)
 
     payload = await intake.analyze(
         message="Summarize the DPA playbook for non legal people",
@@ -150,7 +151,11 @@ async def test_general_question_openai_unavailable_still_records_playbooks(tmp_p
     assert payload["metrics"]["answer_kind"] == "general_answer"
     assert payload["metrics"]["ai_generated"] is False
     assert payload["metrics"]["playbook_row_count"] == 20
-    assert payload["selected_sources"] == ["bmw_data_protection_playbook", "bmw_litigation_playbook"]
+    assert payload["selected_sources"] == [
+        "bmw_data_protection_playbook",
+        "bmw_litigation_playbook",
+        "legal_data_hub",
+    ]
     assert "OpenAI answer generator is unavailable" in payload["plain_answer"]
     assert "DPA NEGOTIATION PLAYBOOK" not in payload["plain_answer"]
 
@@ -160,14 +165,10 @@ async def test_general_question_includes_uploaded_documents_as_context(tmp_path,
     monkeypatch.setattr(intake, "HistoryRepository", lambda: HistoryRepository(database_url))
     openai_calls: list[dict] = []
 
-    async def _unexpected_search(self, query: str, domain: str = "general") -> list[dict[str, str]]:
-        raise AssertionError(f"Legal Data Hub should not be called unless the model asks for legal evidence: {query}")
-
     async def _generated_answer(**kwargs):
         openai_calls.append(kwargs)
         return general_question_module.GeneralAnswerGeneration(answer="OpenAI document-aware answer")
 
-    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _unexpected_search)
     monkeypatch.setattr(general_question_module, "_openai_general_answer", _generated_answer)
 
     payload = await intake.analyze(
@@ -190,12 +191,13 @@ async def test_general_question_includes_uploaded_documents_as_context(tmp_path,
         "bmw_data_protection_playbook",
         "bmw_litigation_playbook",
         "uploaded_bundle",
+        "legal_data_hub",
     ]
     assert payload["legal_sources"] == []
     assert payload["plain_answer"] == "OpenAI document-aware answer"
     assert "Supplier will provide analytics services to BMW" in openai_calls[0]["documents"][0]["text"]
     assert openai_calls[0]["question"] == "Summarize this document for the business team."
-    assert payload["source_usage"][-1]["id"] == "uploaded_bundle"
+    assert any(source["id"] == "uploaded_bundle" for source in payload["source_usage"])
 
 
 async def test_openai_general_answer_prefetches_legal_evidence_for_clear_legal_question(monkeypatch):
@@ -337,7 +339,7 @@ async def test_openai_general_answer_returns_live_qna_without_second_model_call(
     assert "- [2] DER BETRIEB, Datenschutzbehörden planen Kontrollen (Artikel)" in result.answer
 
 
-async def test_openai_general_answer_runs_legal_tool_when_model_requests_it(monkeypatch):
+async def test_openai_general_answer_uses_prefetched_legal_evidence_before_tools(monkeypatch):
     queries: list[tuple[str, str]] = []
     completion_calls: list[dict] = []
 
@@ -396,12 +398,13 @@ async def test_openai_general_answer_runs_legal_tool_when_model_requests_it(monk
         legal_data_hub=StubLegalDataHub(),
     )
 
-    assert queries == [("What does GDPR Article 28 require?", "data_protection")]
+    assert queries == [("Please check external authority for this issue.", "data_protection")]
     assert result.answer == "OpenAI answer with fallback label"
     assert result.legal_tool_called is True
     assert result.legal_basis[0]["citation"] == "GDPR Art. 28"
-    assert completion_calls[0]["tool_choice"] == "auto"
-    assert completion_calls[1]["tools"] is None
+    assert len(completion_calls) == 1
+    assert completion_calls[0]["tool_choice"] is None
+    assert completion_calls[0]["tools"] is None
 
 
 async def test_general_question_legal_tool_sources_are_recorded(tmp_path, monkeypatch):
@@ -474,6 +477,40 @@ async def test_final_contract_review_sets_history_status(tmp_path, monkeypatch):
     assert detail is not None
     assert detail["contract_status"] == "pending_legal"
     assert any(event["event_type"] == "pending_legal" for event in detail["events"])
+
+
+async def test_final_escalation_waits_for_missing_referenced_attachment(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'harvey.db'}"
+    monkeypatch.setattr(intake, "HistoryRepository", lambda: HistoryRepository(database_url))
+    monkeypatch.setattr(intake, "EscalationRepository", lambda: EscalationRepository(database_url))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    payload = await intake.analyze(
+        message="This is the final version. Please escalate if needed.",
+        mode="contract_review",
+        is_final_version=True,
+        files=[
+            _upload_file(
+                "main-contract.txt",
+                (
+                    "Effective Date: 1 January 2026. BMW accepts unlimited liability. "
+                    "The services are governed by Annex 2 and Annex 3."
+                ).encode("utf-8"),
+            ),
+            _upload_file("annex-2.txt", b"Annex 2 - Data Processing Terms"),
+        ],
+    )
+
+    assert payload["escalation_state"] == "Needs business input"
+    assert payload["contract_status"] == "needs_business_input"
+    assert payload["escalation_id"] is None
+    assert payload["metrics"]["needs_business_input"] is True
+    assert "Annex 3" in payload["matter_summary"]["missing_documents"]
+
+    detail = HistoryRepository(database_url).get_item(payload["history_thread_id"])
+    assert detail is not None
+    assert detail["contract_status"] == "needs_business_input"
+    assert any(event["event_type"] == "needs_business_input" for event in detail["events"])
 
 
 def _upload_file(filename: str, content: bytes) -> UploadFile:

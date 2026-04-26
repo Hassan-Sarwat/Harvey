@@ -104,6 +104,7 @@ async def review_contract_by_identity(request: ContractReviewRequest) -> dict:
         metadata={
             "contract_identity": _identity_payload(identity),
             "contract_document": {key: value for key, value in contract_document.items() if key != "text"},
+            "uploaded_documents": [{"filename": contract_document["filename"], "text": contract_document["text"]}],
             "version_number": version_number,
             "is_new_contract": is_new_contract,
             "contract_type_source": contract_type_source,
@@ -180,6 +181,7 @@ async def review_uploaded_contract_by_identity(
         metadata={
             "contract_identity": _identity_payload(identity),
             "contract_document": {key: value for key, value in contract_document.items() if key != "text"},
+            "uploaded_documents": [{"filename": contract_document["filename"], "text": contract_document["text"]}],
             "playbook_id": playbook_id,
             "version_number": version_number,
             "is_new_contract": is_new_contract,
@@ -231,6 +233,11 @@ async def escalate_contract_version(
     review_result = AgentResult.model_validate(version["review_result"])
     if not review_result.requires_escalation:
         raise HTTPException(status_code=409, detail="This contract version has no legal escalation trigger.")
+    if _needs_business_input(review_result):
+        raise HTTPException(
+            status_code=409,
+            detail="This contract version needs business input before it can be escalated to Legal.",
+        )
 
     request = request or BusinessEscalationRequest()
     business_reason = (request.reason or "").strip() or "Business user declined the suggested contract edits."
@@ -259,7 +266,11 @@ async def review_contract(contract_id: str, request: ContractCreateRequest) -> d
         contract_id=contract_id,
         contract_text=request.contract_text,
         contract_type=resolved_contract_type,
-        metadata={"contract_type_source": contract_type_source, "contract_classification": classification_payload},
+        metadata={
+            "contract_type_source": contract_type_source,
+            "contract_classification": classification_payload,
+            "uploaded_documents": [{"filename": "contract.txt", "text": request.contract_text}],
+        },
     )
     result = await ContractReviewWorkflow().run(context)
     _finalize_review_result(result, resolved_contract_type, contract_type_source, classification_payload)
@@ -292,6 +303,7 @@ async def review_uploaded_contract(
         playbook_documents=playbook_documents,
         metadata={
             "contract_document": {key: value for key, value in contract_document.items() if key != "text"},
+            "uploaded_documents": [{"filename": contract_document["filename"], "text": contract_document["text"]}],
             "playbook_id": playbook_id,
             "contract_type_source": contract_type_source,
             "contract_classification": classification_payload,
@@ -355,6 +367,25 @@ def _finalize_review_result(
     result.metadata["contract_classification"] = classification_payload
     result.metadata["business_status"] = "needs_revision" if result.findings else "accepted"
     result.metadata["escalation_available"] = result.requires_escalation
+    result.metadata["needs_business_input"] = _needs_business_input(result)
+    if result.metadata["needs_business_input"]:
+        result.metadata["escalation_available"] = False
+
+
+def _needs_business_input(result: AgentResult) -> bool:
+    if any(
+        finding.id.startswith(("missing-required-document", "missing-business-input"))
+        and finding.severity.value in {"high", "blocker"}
+        for finding in result.findings
+    ):
+        return True
+    for agent_result in result.metadata.get("agent_results", []) or []:
+        if agent_result.get("agent_name") != "completeness_checker":
+            continue
+        metadata = agent_result.get("metadata", {}) or {}
+        if metadata.get("status") == "needs_business_input" or int(metadata.get("blocking_count") or 0) > 0:
+            return True
+    return False
 
 
 async def _resolve_contract_type(contract_type: str | None, contract_text: str) -> tuple[str, str, dict]:

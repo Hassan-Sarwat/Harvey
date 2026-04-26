@@ -1,4 +1,5 @@
 export type EscalationState =
+  | "Needs business input"
   | "No legal escalation recommended"
   | "Legal review recommended"
   | "Legal review required before signature";
@@ -112,7 +113,7 @@ export type RunResult = {
   suggested_language: string;
   history_thread_id?: string;
   contract_id?: string | null;
-  contract_status?: "approved" | "pending_legal" | "dropped" | null;
+  contract_status?: "approved" | "pending_legal" | "needs_business_input" | "dropped" | null;
   is_final_version?: boolean;
   escalation_id?: string | null;
   metrics: Record<string, number | string | boolean>;
@@ -123,7 +124,7 @@ export type HistorySummary = {
   title: string;
   mode: AskMode;
   item_type: "chat" | "contract";
-  contract_status?: "approved" | "pending_legal" | "dropped" | null;
+  contract_status?: "approved" | "pending_legal" | "needs_business_input" | "dropped" | null;
   contract_id?: string | null;
   version_id?: string | null;
   version_number?: number | null;
@@ -159,7 +160,7 @@ export type HistoryEvent = {
   actor: string;
   event_type: string;
   summary: string;
-  status?: "approved" | "pending_legal" | "dropped" | null;
+  status?: "approved" | "pending_legal" | "needs_business_input" | "dropped" | null;
   metadata: Record<string, unknown>;
   created_at: string;
 };
