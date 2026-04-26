@@ -521,12 +521,50 @@ function AgentSelector({
 }
 
 function UploadBox({ files, setFiles }: { files: File[]; setFiles: (files: File[]) => void }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const addFiles = (incoming: File[]) => {
+    const merged = [...files];
+    const seen = new Set(merged.map((file) => `${file.name}-${file.size}-${file.lastModified}`));
+    incoming.forEach((file) => {
+      const key = `${file.name}-${file.size}-${file.lastModified}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(file);
+      }
+    });
+    setFiles(merged);
+  };
+
   return (
-    <div className="upload-box">
+    <div
+      className={isDragging ? "upload-box dragging" : "upload-box"}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(false);
+        addFiles(Array.from(event.dataTransfer.files ?? []));
+      }}
+    >
       <UploadCloud size={24} />
       <div>
-        <strong>Upload contract bundle</strong>
-        <span>PDF, DOCX, XLSX, PPTX, TXT, CSV, EML, or ZIP</span>
+        <strong>{isDragging ? "Drop files to attach them" : "Upload contract bundle"}</strong>
+        <span>Drag files here or browse: PDF, DOCX, XLSX, PPTX, TXT, CSV, EML, ZIP</span>
       </div>
       <label className="file-button">
         <FolderOpen size={17} />
@@ -534,7 +572,7 @@ function UploadBox({ files, setFiles }: { files: File[]; setFiles: (files: File[
         <input
           type="file"
           multiple
-          onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+          onChange={(event) => addFiles(Array.from(event.target.files ?? []))}
           accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.eml,.zip,.md"
         />
       </label>

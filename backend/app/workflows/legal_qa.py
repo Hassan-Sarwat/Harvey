@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.services.legal_data_hub import LegalDataHubClient
+from app.services.model_context import is_model_access_error, openai_model_candidates
 from app.services.openai_compat import chat_completion_options
 from app.services.playbook_repository import (
     load_playbook_markdown,
@@ -188,15 +189,26 @@ async def _openai_answer(
 
     try:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai_model,
-            messages=messages,
-            **chat_completion_options(
-                settings.openai_model,
-                max_tokens=1800 if answer_kind == "playbook_summary" else 1000,
-            ),
-        )
-        return response.choices[0].message.content or ""
+        last_error: Exception | None = None
+        for model in openai_model_candidates(settings):
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    **chat_completion_options(
+                        model,
+                        max_tokens=1800 if answer_kind == "playbook_summary" else 1000,
+                    ),
+                )
+                return response.choices[0].message.content or ""
+            except Exception as exc:
+                last_error = exc
+                if not is_model_access_error(exc):
+                    raise
+                logger.warning("OpenAI model %s unavailable for legal Q&A answer; trying fallback model", model)
+        if last_error:
+            raise last_error
+        return ""
     except Exception as exc:
         logger.warning("OpenAI call failed: %s", exc)
         return ""

@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.services.legal_data_hub import LegalDataHubClient
+from app.services.model_context import current_openai_model
 from app.services.openai_compat import chat_completion_options
 from app.services.playbook_repository import (
     load_playbook_markdown,
@@ -145,6 +146,7 @@ async def _openai_general_answer(
 
     try:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
+        model = current_openai_model(settings)
         system_prompt = _system_prompt(playbook_rows, legal_evidence_prefetched=bool(legal_basis))
         user_prompt = _user_prompt(question=question, context=context, documents=documents, legal_basis=legal_basis)
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
@@ -155,7 +157,7 @@ async def _openai_general_answer(
         if legal_basis:
             response = await _create_chat_completion(
                 client=client,
-                model=settings.openai_model,
+                model=model,
                 messages=messages,
                 tools=None,
                 tool_choice=None,
@@ -170,7 +172,7 @@ async def _openai_general_answer(
 
         first_response = await _create_chat_completion(
             client=client,
-            model=settings.openai_model,
+            model=model,
             messages=messages,
             tools=[_legal_search_tool_schema()],
             tool_choice="auto",
@@ -214,7 +216,7 @@ async def _openai_general_answer(
 
         final_response = await _create_chat_completion(
             client=client,
-            model=settings.openai_model,
+            model=model,
             messages=messages,
             tools=None,
             tool_choice=None,

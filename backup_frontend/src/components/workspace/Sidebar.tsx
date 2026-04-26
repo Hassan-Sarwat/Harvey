@@ -45,7 +45,7 @@ export const WorkspaceSidebar = ({
     <aside className="w-[260px] shrink-0 border-r border-border/60 bg-card/40 backdrop-blur-xl flex flex-col h-screen sticky top-0">
       {/* Brand */}
       <div className="px-5 py-5 border-b border-border/60 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg gradient-primary grid place-items-center shadow-glow">
+        <div className="h-10 w-10 rounded-lg surface-primary grid place-items-center shadow-glow">
           <Scale className="h-5 w-5 text-primary-foreground" />
         </div>
         <div className="leading-tight">

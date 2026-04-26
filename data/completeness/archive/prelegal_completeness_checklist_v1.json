@@ -1,0 +1,10 @@
+{
+  "archived_reason": "Replaced by a narrower referenced-file-only completeness gate.",
+  "rules": [
+    "All annexes, attachments, schedules, exhibits, appendices, Anlagen, and Anhaenge referenced as part of the contract package must be present.",
+    "If only an order form is present but it references a master agreement, request the master agreement.",
+    "If a DPA mentions TOMs, subprocessors, SCCs, transfer assessments, security appendices, or audit evidence, referenced materials should be present.",
+    "Missing business context such as BMW entity, counterparty, use case, contract value, data categories, start date, or deadline should be flagged as business input.",
+    "Contradictions between the user's statement and uploaded documents should be flagged."
+  ]
+}

@@ -19,6 +19,7 @@ import {
   Loader2,
   Menu,
   MessageSquareText,
+  Paperclip,
   Send,
   Search,
   Settings,
@@ -31,7 +32,11 @@ import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { analyzeMatter, askEscalationQuestion, decideEscalation, dropHistoryItem, getDashboard, getEscalation, getHistory, getHistoryItem, listEscalations } from "./api";
 import donnaLogo from "./assets/donna-logo.png";
-import type { AgentMetric, AskMode, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
+import type { AgentMetric, AskMode, BusinessInputItem, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
+
+type ModelMode = "quality" | "fast";
+type AskAttachment = { name: string; size: number };
+type AskChatMessage = { role: "user" | "assistant"; content: string; result?: RunResult; attachments?: AskAttachment[] };
 
 const mockMatterSummary = {
   agreement_type: "IT vendor SaaS agreement / DPA",
@@ -119,11 +124,12 @@ function App() {
   const [activeView, setActiveView] = useState<"ask" | "history" | "dashboard" | "escalations">("ask");
   const [escalationCount, setEscalationCount] = useState(0);
   const [askMode, setAskMode] = useState<AskMode>("general_question");
+  const [modelMode, setModelMode] = useState<ModelMode>("quality");
   const [message, setMessage] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isFinalVersion, setIsFinalVersion] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string; result?: RunResult }>>([]);
+  const [chatMessages, setChatMessages] = useState<AskChatMessage[]>([]);
   const [historyItems, setHistoryItems] = useState<HistorySummary[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -169,6 +175,17 @@ function App() {
     }
   }
 
+  function reopenHistoryInChat(detail: HistoryDetail) {
+    setThreadId(detail.id);
+    setAskMode(detail.mode);
+    setChatMessages(historyDetailToChatMessages(detail));
+    setMessage("");
+    setFiles([]);
+    setIsFinalVersion(false);
+    setSelectedHistory(detail);
+    setActiveView("ask");
+  }
+
   async function handleAnalyze() {
     const submitted = message.trim();
     if (!submitted && !files.length) {
@@ -177,12 +194,13 @@ function App() {
     }
     const displayedMessage =
       submitted || (askMode === "general_question" ? "Summarize uploaded document(s)." : "Review uploaded contract bundle.");
+    const submittedAttachments = files.map((file) => ({ name: file.name, size: file.size }));
     setIsRunning(true);
     setError(null);
-    setChatMessages((items) => [...items, { role: "user", content: displayedMessage }]);
+    setChatMessages((items) => [...items, { role: "user", content: displayedMessage, attachments: submittedAttachments }]);
     setMessage("");
     try {
-      const next = await analyzeMatter({ message: submitted, mode: askMode, threadId, isFinalVersion, files, demoMode: false });
+      const next = await analyzeMatter({ message: submitted, mode: askMode, threadId, isFinalVersion, files, demoMode: false, modelMode });
       const normalized = applyAutoRoutingFallback(next, true);
       setThreadId(normalized.history_thread_id ?? threadId);
       setChatMessages((items) => [...items, { role: "assistant", content: normalized.plain_answer, result: normalized }]);
@@ -216,6 +234,7 @@ function App() {
             onRefresh={loadHistory}
             onSelect={selectHistoryItem}
             onDrop={handleDropHistory}
+            onOpenInChat={reopenHistoryInChat}
           />
         ) : (
           <AskDonnaView
@@ -227,7 +246,9 @@ function App() {
             files={files}
             isRunning={isRunning}
             error={error}
+            modelMode={modelMode}
             setMode={setAskMode}
+            setModelMode={setModelMode}
             setMessage={setMessage}
             setIsFinalVersion={setIsFinalVersion}
             setFiles={setFiles}
@@ -333,16 +354,39 @@ function Topbar() {
   );
 }
 
+function historyDetailToChatMessages(detail: HistoryDetail): AskChatMessage[] {
+  const runsById = new Map(detail.runs.map((run) => [run.id, run]));
+  return detail.messages.map((message) => {
+    if (message.role === "assistant") {
+      const runId = typeof message.metadata?.run_id === "string" ? message.metadata.run_id : "";
+      const run = runsById.get(runId);
+      return {
+        role: "assistant",
+        content: message.content,
+        result: run?.result,
+      };
+    }
+    const uploaded = Array.isArray(message.metadata?.uploaded_filenames) ? message.metadata.uploaded_filenames : [];
+    return {
+      role: "user",
+      content: message.content,
+      attachments: uploaded.map((name) => ({ name: String(name), size: 0 })),
+    };
+  });
+}
+
 function AskDonnaView(props: {
   mode: AskMode;
   message: string;
   threadId: string | null;
   isFinalVersion: boolean;
-  chatMessages: Array<{ role: "user" | "assistant"; content: string; result?: RunResult }>;
+  chatMessages: AskChatMessage[];
   files: File[];
   isRunning: boolean;
   error: string | null;
+  modelMode: ModelMode;
   setMode: (value: AskMode) => void;
+  setModelMode: (value: ModelMode) => void;
   setMessage: (value: string) => void;
   setIsFinalVersion: (value: boolean) => void;
   setFiles: (files: File[]) => void;
@@ -352,6 +396,7 @@ function AskDonnaView(props: {
     props.mode === "contract_review"
       ? "Paste the contract text, describe the business context, or upload a file. Ask Donna will identify the contract type and route the right checks."
       : "Ask about law, BMW playbook positions, or an uploaded document. For example: summarize this PDF or explain GDPR Art. 28.";
+  const addFilesToComposer = (incoming: File[]) => props.setFiles(mergeUniqueFiles(props.files, incoming));
 
   return (
     <div className="workspace ask-workspace">
@@ -364,6 +409,7 @@ function AskDonnaView(props: {
         </div>
 
         <div className="chat-card">
+          {props.isRunning ? <RunningAgentRail mode={props.mode} /> : null}
           <div className="chat-transcript">
             {!props.chatMessages.length ? (
               <div className="welcome-message">
@@ -379,7 +425,8 @@ function AskDonnaView(props: {
                 <MessageAvatar role={item.role} />
                 <div className="message-bubble">
                   {item.role === "assistant" && item.result ? <ChatResultSummary result={item.result} /> : null}
-                  {item.role === "assistant" ? <FootnotedAnswer content={item.content} result={item.result} /> : <p>{item.content}</p>}
+                  {item.role === "assistant" ? <FootnotedAnswer content={item.content} result={item.result} onAddFiles={addFilesToComposer} /> : <p>{item.content}</p>}
+                  {item.role === "user" && item.attachments?.length ? <MessageAttachments attachments={item.attachments} /> : null}
                 </div>
               </div>
             ))}
@@ -419,6 +466,19 @@ function AskDonnaView(props: {
                   </button>
                 </div>
               </div>
+              <button
+                className={props.modelMode === "fast" ? "fast-mode-toggle active" : "fast-mode-toggle"}
+                type="button"
+                onClick={() => props.setModelMode(props.modelMode === "fast" ? "quality" : "fast")}
+                aria-pressed={props.modelMode === "fast"}
+                title={props.modelMode === "fast" ? "Using gpt-5.4-mini" : "Using gpt-5.5"}
+              >
+                <span className="fast-switch" />
+                <span>
+                  {props.modelMode === "fast" ? "Fast mode" : "Quality mode"}
+                  <small>{props.modelMode === "fast" ? "5.4 mini" : "5.5"}</small>
+                </span>
+              </button>
               {props.mode === "contract_review" ? (
                 <button
                   className={props.isFinalVersion ? "final-toggle selected" : "final-toggle"}
@@ -465,6 +525,56 @@ function AskDonnaView(props: {
   );
 }
 
+function RunningAgentRail({ mode }: { mode: AskMode }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const steps =
+    mode === "contract_review"
+      ? [
+          "Contract classification",
+          "DPA playbook judge",
+          "German / EU legal check",
+          "Risk aggregation",
+          "Completeness gate",
+          "Escalation decision"
+        ]
+      : [
+          "Question routing",
+          "BMW playbook context",
+          "German / EU legal evidence",
+          "Answer drafting",
+          "History update"
+        ];
+
+  useEffect(() => {
+    setActiveIndex(0);
+    const interval = window.setInterval(() => {
+      setActiveIndex((current) => Math.min(current + 1, steps.length - 1));
+    }, mode === "contract_review" ? 2600 : 1900);
+    return () => window.clearInterval(interval);
+  }, [mode, steps.length]);
+
+  return (
+    <div className="agent-run-rail" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} aria-label="Running agent workflow">
+      {steps.map((step, index) => {
+        const state = index < activeIndex ? "completed" : index === activeIndex ? "active" : "pending";
+        const status = state === "completed" ? "Completed" : state === "active" ? "In progress" : "Pending";
+        return (
+          <div className={`agent-run-step ${state}`} key={step}>
+            <div className={`agent-run-index ${state}`}>
+              {state === "completed" ? <CheckCircle2 size={16} /> : index + 1}
+            </div>
+            <div className="agent-run-copy">
+              <strong>{step}</strong>
+              <span>{status}</span>
+            </div>
+            {index < steps.length - 1 ? <div className="agent-run-line" /> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function MessageAvatar({ role }: { role: "user" | "assistant" }) {
   if (role === "user") {
     return <div className="message-avatar">You</div>;
@@ -473,6 +583,19 @@ function MessageAvatar({ role }: { role: "user" | "assistant" }) {
   return (
     <div className="message-avatar donna-avatar" aria-label="Donna">
       <img src={donnaLogo} alt="" />
+    </div>
+  );
+}
+
+function MessageAttachments({ attachments }: { attachments: AskAttachment[] }) {
+  return (
+    <div className="message-attachments" aria-label="Attached files">
+      {attachments.map((file, index) => (
+        <span className="message-attachment-chip" key={`${file.name}-${file.size}-${index}`} title={file.name}>
+          <Paperclip size={14} />
+          <span>{file.name}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -497,6 +620,7 @@ function ChatResultSummary({ result }: { result: RunResult }) {
           <Database size={15} />
           {sources.length ? `${sources.length} source group${sources.length === 1 ? "" : "s"}` : "No sources recorded"}
         </span>
+        {result.metrics?.openai_model ? <span className="status-pill model-pill">{String(result.metrics.openai_model)}</span> : null}
       </div>
     </div>
   );
@@ -509,15 +633,557 @@ function statusPillClass(status?: RunResult["contract_status"]) {
   return "status-pill";
 }
 
-function FootnotedAnswer({ content, result }: { content: string; result?: RunResult }) {
+function FootnotedAnswer({
+  content,
+  result,
+  onAddFiles
+}: {
+  content: string;
+  result?: RunResult;
+  onAddFiles?: (files: File[]) => void;
+}) {
   const footnotes = result ? buildCitationFootnotes(content, result) : [];
   const linkedContent = result ? linkCitationNumbers(content, result.id, new Set(footnotes.map((footnote) => footnote.number))) : content;
   return (
     <>
       <MarkdownMessage content={linkedContent} />
+      {result?.business_input?.status === "needs_business_input" ? <LegalReviewGatePanel result={result} onAddFiles={onAddFiles} /> : null}
       {result ? <CitationFootnotes resultId={result.id} footnotes={footnotes} sourceGroups={result.source_usage ?? []} /> : null}
     </>
   );
+}
+
+function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAddFiles?: (files: File[]) => void }) {
+  const [step, setStep] = useState<"review" | "missing" | "ticket">("review");
+  const [isDragging, setIsDragging] = useState(false);
+  const [addedFiles, setAddedFiles] = useState<string[]>([]);
+  const [ticketQuestion, setTicketQuestion] = useState("Please review the flagged playbook deviations and approve the proposed escalation path.");
+  const [ticketOwner, setTicketOwner] = useState("John Doe");
+  const [ticketUrgency, setTicketUrgency] = useState("normal");
+  const [ticketNotes, setTicketNotes] = useState("");
+  const [ticketSent, setTicketSent] = useState(false);
+  const check = result.business_input;
+  if (!check || check.status !== "needs_business_input") return null;
+
+  const missing = check.missing_items ?? [];
+  const escalationFindings = (result.findings ?? []).filter(isLegalEscalationFinding).slice(0, 3);
+  const sourceLabel = check.source === "openai" ? "LLM file check" : "File reference parser";
+  const addMissingFiles = (incoming: File[]) => {
+    if (!incoming.length) return;
+    onAddFiles?.(incoming);
+    setAddedFiles((current) => [...current, ...incoming.map((file) => file.name)]);
+  };
+
+  return (
+    <section className="legal-flow-card" aria-label="Legal review and missing files">
+      <div className="legal-flow-steps">
+        <button className={step === "review" ? "active" : ""} type="button" onClick={() => setStep("review")}>
+          <span>1</span>
+          Legal review
+        </button>
+        <button className={step === "missing" ? "active" : ""} type="button" onClick={() => setStep("missing")}>
+          <span>2</span>
+          Missing files
+        </button>
+        <button className={step === "ticket" ? "active" : ""} type="button" onClick={() => setStep("ticket")}>
+          <span>3</span>
+          Ticket details
+        </button>
+      </div>
+
+      {step === "review" ? (
+        <div className="legal-flow-pane">
+          <div className="legal-flow-head">
+            <Gavel size={18} />
+            <div>
+              <strong>Recommended for Legal review</strong>
+              <span>Donna checked the contract against the BMW playbook first. The package is not ready to send yet because referenced files are missing.</span>
+            </div>
+          </div>
+
+          <div className="legal-flow-list">
+            {escalationFindings.length ? (
+              escalationFindings.map((finding) => (
+                <article className="legal-flow-item" key={finding.id}>
+                  <div>
+                    <strong>{finding.title}</strong>
+                    <span className={finding.severity === "High" ? "severity-high" : ""}>{finding.category} · {finding.severity}</span>
+                  </div>
+                  <p>{finding.description}</p>
+                  {finding.evidence?.[0]?.quote ? <blockquote>{finding.evidence[0].quote}</blockquote> : null}
+                </article>
+              ))
+            ) : (
+              <article className="legal-flow-item">
+                <div>
+                  <strong>Playbook deviation detected</strong>
+                  <span>Legal review recommended</span>
+                </div>
+                <p>{result.plain_answer}</p>
+              </article>
+            )}
+          </div>
+
+          <button className="legal-flow-next" type="button" onClick={() => setStep("missing")}>
+            Next: add missing {missing.length === 1 ? "file" : "files"}
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      ) : step === "missing" ? (
+        <div className="legal-flow-pane">
+          <div className="legal-flow-head">
+            <Paperclip size={18} />
+            <div>
+              <strong>Add missing referenced {missing.length === 1 ? "file" : "files"}</strong>
+              <span>{sourceLabel} only checked explicit references in the uploaded file against the current attachments.</span>
+            </div>
+          </div>
+
+          <div className="legal-flow-list">
+            {missing.map((item, index) => (
+              <article className="legal-flow-item missing" key={`${item.label}-${index}`}>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.source_file || "ticket intake"}</span>
+                </div>
+                <p>{item.reason}</p>
+                {item.source_quote ? (
+                  <blockquote>
+                    <span>Why Donna expects it</span>
+                    {item.source_quote}
+                  </blockquote>
+                ) : null}
+              </article>
+            ))}
+          </div>
+
+          <div className="legal-flow-actions">
+            <button className="legal-flow-back" type="button" onClick={() => setStep("review")}>
+              Back
+            </button>
+            <button className="legal-flow-next" type="button" onClick={() => setStep("ticket")}>
+              Next: ticket details
+              <ChevronRight size={16} />
+            </button>
+            <span>Upload the missing file{missing.length === 1 ? "" : "s"} and rerun before sending to Legal.</span>
+          </div>
+
+          <label
+            className={isDragging ? "legal-flow-upload dragging" : "legal-flow-upload"}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setIsDragging(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              addMissingFiles(Array.from(event.dataTransfer.files ?? []));
+            }}
+          >
+            <UploadCloud size={18} />
+            <span>
+              <strong>Add missing files</strong>
+              <small>Drop here or browse. Files are attached to the composer for the rerun.</small>
+            </span>
+            <input
+              type="file"
+              multiple
+              onChange={(event) => {
+                addMissingFiles(Array.from(event.target.files ?? []));
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+
+          {addedFiles.length ? (
+            <div className="legal-flow-added">
+              {addedFiles.slice(-4).map((filename, index) => (
+                <span key={`${filename}-${index}`}>
+                  <Paperclip size={13} />
+                  {filename}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="legal-flow-pane">
+          <div className="legal-flow-head">
+            <Send size={18} />
+            <div>
+              <strong>Submit Legal ticket</strong>
+              <span>Add the missing files and business context, then send the prepared package to Legal.</span>
+            </div>
+          </div>
+
+          <label
+            className={isDragging ? "legal-flow-upload dragging" : "legal-flow-upload"}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setIsDragging(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              addMissingFiles(Array.from(event.dataTransfer.files ?? []));
+            }}
+          >
+            <UploadCloud size={18} />
+            <span>
+              <strong>Attach missing files</strong>
+              <small>Drop files here or browse. They will be included in the Legal package draft.</small>
+            </span>
+            <input
+              type="file"
+              multiple
+              onChange={(event) => {
+                addMissingFiles(Array.from(event.target.files ?? []));
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+
+          {addedFiles.length ? (
+            <div className="legal-flow-added">
+              {addedFiles.slice(-6).map((filename, index) => (
+                <span key={`${filename}-${index}`}>
+                  <Paperclip size={13} />
+                  {filename}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="ticket-form-grid">
+            <label className="ticket-field wide">
+              <span>Question for Legal</span>
+              <textarea value={ticketQuestion} onChange={(event) => setTicketQuestion(event.target.value)} rows={3} />
+            </label>
+            <label className="ticket-field">
+              <span>Business owner</span>
+              <input value={ticketOwner} onChange={(event) => setTicketOwner(event.target.value)} placeholder="Name or team" />
+            </label>
+            <label className="ticket-field">
+              <span>Urgency</span>
+              <select value={ticketUrgency} onChange={(event) => setTicketUrgency(event.target.value)}>
+                <option value="normal">Normal</option>
+                <option value="urgent">Urgent</option>
+                <option value="signing_blocker">Signing blocker</option>
+              </select>
+            </label>
+            <label className="ticket-field wide">
+              <span>Relevant business context</span>
+              <textarea value={ticketNotes} onChange={(event) => setTicketNotes(event.target.value)} rows={4} placeholder="Commercial pressure, signing deadline, negotiation history, vendor position, or why a referenced file is unavailable." />
+            </label>
+          </div>
+
+          <div className="ticket-review-box">
+            <strong>Ticket package status</strong>
+            <span>{missing.length} referenced file{missing.length === 1 ? "" : "s"} still flagged by Donna.</span>
+            {addedFiles.length ? <span>{addedFiles.length} new file{addedFiles.length === 1 ? "" : "s"} added to the composer for rerun.</span> : null}
+            <small>After adding files, rerun Donna so the completeness gate can verify the package before the ticket is sent.</small>
+          </div>
+
+          <div className="legal-flow-actions">
+            <button className="legal-flow-back" type="button" onClick={() => setStep("missing")}>
+              Back
+            </button>
+            <button className="legal-flow-next" type="button" onClick={() => setTicketSent(true)}>
+              Send ticket to Legal
+              <CheckCircle2 size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+      {ticketSent ? (
+        <LegalTicketModal
+          result={result}
+          missing={missing}
+          escalationFindings={escalationFindings}
+          addedFiles={addedFiles}
+          ticketQuestion={ticketQuestion}
+          ticketOwner={ticketOwner}
+          ticketUrgency={ticketUrgency}
+          ticketNotes={ticketNotes}
+          onClose={() => setTicketSent(false)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function LegalTicketModal({
+  result,
+  missing,
+  escalationFindings,
+  addedFiles,
+  ticketQuestion,
+  ticketOwner,
+  ticketUrgency,
+  ticketNotes,
+  onClose
+}: {
+  result: RunResult;
+  missing: BusinessInputItem[];
+  escalationFindings: Finding[];
+  addedFiles: string[];
+  ticketQuestion: string;
+  ticketOwner: string;
+  ticketUrgency: string;
+  ticketNotes: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="ticket-modal-backdrop" role="presentation">
+      <section className="ticket-modal" role="dialog" aria-modal="true" aria-label="Legal ticket package">
+        <div className="ticket-modal-head">
+          <div>
+            <span>Legal ticket</span>
+            <strong>Package sent to Legal</strong>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close Legal ticket popup">
+            ×
+          </button>
+        </div>
+
+        <div className="ticket-state-grid">
+          <div>
+            <span>Status</span>
+            <strong>Pending Legal review</strong>
+          </div>
+          <div>
+            <span>Urgency</span>
+            <strong>{ticketUrgency.replace(/_/g, " ")}</strong>
+          </div>
+          <div>
+            <span>Owner</span>
+            <strong>{ticketOwner || "Not provided"}</strong>
+          </div>
+          <div>
+            <span>Tracking</span>
+            <strong>{result.id}</strong>
+          </div>
+        </div>
+
+        <div className="ticket-modal-section">
+          <h3>Question for Legal</h3>
+          <p>{ticketQuestion || "Not provided"}</p>
+        </div>
+
+        <div className="ticket-modal-section">
+          <h3>Escalation basis</h3>
+          {escalationFindings.map((finding) => (
+            <div className="ticket-modal-item" key={finding.id}>
+              <strong>{finding.title}</strong>
+              <span className={finding.severity === "High" ? "severity-high" : ""}>{finding.category} · {finding.severity}</span>
+              <p>{finding.description}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="ticket-modal-section">
+          <h3>Missing-file state</h3>
+          <p>{missing.length} referenced file{missing.length === 1 ? "" : "s"} flagged by Donna. {addedFiles.length} file{addedFiles.length === 1 ? "" : "s"} added in this submission screen.</p>
+          <div className="ticket-modal-chips">
+            {missing.map((item) => <span key={item.label}>{item.label}</span>)}
+          </div>
+        </div>
+
+        <div className="ticket-modal-section">
+          <h3>Added attachments</h3>
+          <div className="ticket-modal-chips">
+            {addedFiles.length ? addedFiles.map((file, index) => <span key={`${file}-${index}`}>{file}</span>) : <span>No new files attached here</span>}
+          </div>
+        </div>
+
+        <div className="ticket-modal-section">
+          <h3>Business context</h3>
+          <p>{ticketNotes || "No additional business context provided."}</p>
+        </div>
+
+        <div className="ticket-state-grid compact">
+          <div>
+            <span>Model</span>
+            <strong>{String(result.metrics?.openai_model || "Not recorded")}</strong>
+          </div>
+          <div>
+            <span>Sources</span>
+            <strong>{(result.source_usage ?? []).length} group(s)</strong>
+          </div>
+          <div>
+            <span>Findings</span>
+            <strong>{result.findings.length}</strong>
+          </div>
+          <div>
+            <span>Created</span>
+            <strong>{new Date(result.created_at).toLocaleString()}</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function EscalationReasonPanel({ result }: { result: RunResult }) {
+  const escalationFindings = (result.findings ?? []).filter(isLegalEscalationFinding).slice(0, 3);
+  if (!escalationFindings.length) return null;
+
+  return (
+    <section className="escalation-reason-panel" aria-label="Legal escalation reason">
+      <div className="escalation-reason-head">
+        <Gavel size={18} />
+        <div>
+          <strong>Step 1 · Playbook review recommends Legal escalation</strong>
+          <span>Donna first checked the contract clauses against the active BMW playbook and German/EU legal review path.</span>
+        </div>
+      </div>
+      <div className="escalation-reason-list">
+        {escalationFindings.map((finding) => (
+          <article className="escalation-reason-card" key={finding.id}>
+            <div>
+              <strong>{finding.title}</strong>
+                    <span className={finding.severity === "High" ? "severity-high" : ""}>{finding.category} · {finding.severity}</span>
+            </div>
+            <p>{finding.description}</p>
+            {finding.evidence?.[0]?.quote ? <blockquote>{finding.evidence[0].quote}</blockquote> : null}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BusinessInputPanel({ result }: { result: RunResult }) {
+  const check = result.business_input;
+  if (!check || check.status !== "needs_business_input") return null;
+  const missing = check.missing_items ?? [];
+  const sourceLabel = check.source === "openai" ? "LLM completeness judge" : "Completeness fallback parser";
+
+  return (
+    <section className="business-input-panel" aria-label="Missing business input">
+      <div className="business-input-head">
+        <AlertTriangle size={18} />
+        <div>
+          <strong>Step 2 · Add {missing.length === 1 ? "the missing file" : `${missing.length} missing files`} before Legal receives this ticket</strong>
+          <span>{sourceLabel} looked only for documents explicitly referenced in the uploaded file and compared them against the current attachments.</span>
+        </div>
+      </div>
+
+      <div className="missing-file-list">
+        {missing.map((item, index) => (
+          <article className="missing-file-card" key={`${item.label}-${index}`}>
+            <div className="missing-file-top">
+              <span className="missing-file-index">{index + 1}</span>
+              <div>
+                <strong>{item.label}</strong>
+                <small>{item.severity === "blocking" ? "Blocking Legal submission" : item.severity}</small>
+              </div>
+            </div>
+            <p>{item.reason}</p>
+            {item.source_quote ? (
+              <blockquote>
+                <span>Why Donna expects it</span>
+                {item.source_quote}
+              </blockquote>
+            ) : null}
+            <div className="missing-file-meta">
+              <span><FileText size={14} />Referenced in: {item.source_file || "ticket intake"}</span>
+              {typeof item.confidence === "number" ? <span>{Math.round(item.confidence * 100)}% confidence</span> : null}
+            </div>
+            <div className="missing-file-action">
+              <strong>Next step</strong>
+              <span>{businessActionLabel(item.user_action)}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <details className="completeness-audit">
+        <summary>Show what Donna checked</summary>
+        <div className="completeness-audit-grid">
+          <div>
+            <strong>Uploaded files</strong>
+            {check.uploaded_files.length ? (
+              check.uploaded_files.map((file, index) => (
+                <span key={`${file.filename}-${index}`}>
+                  {file.filename || "Unnamed file"}
+                  {file.character_count ? ` · ${file.character_count.toLocaleString()} chars` : ""}
+                  {file.extraction_method ? ` · ${file.extraction_method.replace(/_/g, " ")}` : ""}
+                </span>
+              ))
+            ) : (
+              <span>No uploaded files were attached.</span>
+            )}
+          </div>
+          <div>
+            <strong>Expected package</strong>
+            {check.expected_documents.length ? (
+              check.expected_documents.map((item, index) => <span key={index}>{documentLabel(item)}</span>)
+            ) : (
+              <span>No expected documents were returned.</span>
+            )}
+          </div>
+          <div>
+            <strong>Matched files</strong>
+            {check.found_documents.length ? (
+              check.found_documents.map((item, index) => <span key={index}>{documentMatchLabel(item)}</span>)
+            ) : (
+              <span>No referenced files were matched.</span>
+            )}
+          </div>
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function isCompletenessFinding(finding: Finding) {
+  const id = finding.id.toLowerCase();
+  return (
+    id.startsWith("missing-required-document") ||
+    id.startsWith("missing-business-input") ||
+    finding.category.toLowerCase() === "completeness"
+  );
+}
+
+function isLegalEscalationFinding(finding: Finding) {
+  return !isCompletenessFinding(finding) && finding.severity === "High";
+}
+
+function businessActionLabel(action?: string) {
+  if (action === "add_specific_business_question") return "Add the requested file or remove the unavailable reference before rerunning the review.";
+  return "Upload this file to the document bundle, or record why it is unavailable before escalation.";
+}
+
+function documentLabel(item: Record<string, unknown>) {
+  const label = String(item.label || item.normalized_label || "Expected document");
+  const basis = item.basis ? ` (${String(item.basis).replace(/_/g, " ")})` : "";
+  return `${label}${basis}`;
+}
+
+function documentMatchLabel(item: Record<string, unknown>) {
+  const label = String(item.expected_label || "Expected document");
+  const status = String(item.status || "checked").replace(/_/g, " ");
+  const matched = item.matched_filename ? `: ${String(item.matched_filename)}` : "";
+  return `${label} - ${status}${matched}`;
 }
 
 type CitationFootnote = {
@@ -727,13 +1393,55 @@ function AgentSelector({
   );
 }
 
+function mergeUniqueFiles(files: File[], incoming: File[]) {
+    const merged = [...files];
+    const seen = new Set(merged.map((file) => `${file.name}-${file.size}-${file.lastModified}`));
+    incoming.forEach((file) => {
+      const key = `${file.name}-${file.size}-${file.lastModified}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(file);
+      }
+    });
+    return merged;
+}
+
 function UploadBox({ files, setFiles }: { files: File[]; setFiles: (files: File[]) => void }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const addFiles = (incoming: File[]) => {
+    setFiles(mergeUniqueFiles(files, incoming));
+  };
+
   return (
-    <div className="upload-box">
+    <div
+      className={isDragging ? "upload-box dragging" : "upload-box"}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(false);
+        addFiles(Array.from(event.dataTransfer.files ?? []));
+      }}
+    >
       <UploadCloud size={24} />
       <div>
-        <strong>Upload document bundle</strong>
-        <span>Contracts, annexes, emails, spreadsheets, PDFs, or ZIPs</span>
+        <strong>{isDragging ? "Drop files to attach them" : "Upload document bundle"}</strong>
+        <span>Drag files here or browse: contracts, annexes, emails, spreadsheets, PDFs, ZIPs</span>
       </div>
       <label className="file-button">
         <FolderOpen size={17} />
@@ -741,7 +1449,7 @@ function UploadBox({ files, setFiles }: { files: File[]; setFiles: (files: File[
         <input
           type="file"
           multiple
-          onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+          onChange={(event) => addFiles(Array.from(event.target.files ?? []))}
           accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.eml,.zip,.md"
         />
       </label>
@@ -880,7 +1588,8 @@ function HistoryView({
   error,
   onRefresh,
   onSelect,
-  onDrop
+  onDrop,
+  onOpenInChat
 }: {
   items: HistorySummary[];
   selected: HistoryDetail | null;
@@ -889,6 +1598,7 @@ function HistoryView({
   onRefresh: () => Promise<HistorySummary[]>;
   onSelect: (id: string) => void;
   onDrop: (id: string) => void;
+  onOpenInChat: (detail: HistoryDetail) => void;
 }) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
@@ -951,7 +1661,13 @@ function HistoryView({
                   <p className="eyebrow">{selected.mode === "contract_review" ? "Contract History" : "Chat History"}</p>
                   <h2>{selected.title}</h2>
                 </div>
-                <HistoryStatus item={selected} />
+                <div className="history-detail-actions">
+                  <HistoryStatus item={selected} />
+                  <button className="secondary-button" type="button" onClick={() => onOpenInChat(selected)}>
+                    <MessageSquareText size={17} />
+                    Reopen in chat
+                  </button>
+                </div>
               </div>
 
               <div className="history-columns">

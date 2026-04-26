@@ -105,7 +105,7 @@ async def test_general_question_uses_complete_active_playbooks(message, tmp_path
 
     assert payload["metrics"]["answer_kind"] == "general_answer"
     assert payload["metrics"]["ai_generated"] is True
-    assert payload["metrics"]["playbook_row_count"] == 20
+    assert payload["metrics"]["playbook_row_count"] == 19
     assert payload["metrics"]["legal_tool_called"] is True
     assert payload["routed_agents"] == ["legal_qa"]
     assert payload["selected_sources"] == [
@@ -114,7 +114,7 @@ async def test_general_question_uses_complete_active_playbooks(message, tmp_path
         "legal_data_hub",
     ]
     source_counts = {source["id"]: source["item_count"] for source in payload["source_usage"]}
-    assert source_counts == {"bmw_data_protection_playbook": 8, "bmw_litigation_playbook": 12, "legal_data_hub": 0}
+    assert source_counts == {"bmw_data_protection_playbook": 7, "bmw_litigation_playbook": 12, "legal_data_hub": 0}
     assert payload["plain_answer"] == "OpenAI tailored playbook answer"
     assert openai_calls[0]["question"] == message
     assert {row["_source_id"] for row in openai_calls[0]["playbook_rows"]} == {
@@ -150,7 +150,7 @@ async def test_general_question_openai_unavailable_still_records_playbooks(tmp_p
 
     assert payload["metrics"]["answer_kind"] == "general_answer"
     assert payload["metrics"]["ai_generated"] is False
-    assert payload["metrics"]["playbook_row_count"] == 20
+    assert payload["metrics"]["playbook_row_count"] == 19
     assert payload["selected_sources"] == [
         "bmw_data_protection_playbook",
         "bmw_litigation_playbook",
@@ -506,11 +506,37 @@ async def test_final_escalation_waits_for_missing_referenced_attachment(tmp_path
     assert payload["escalation_id"] is None
     assert payload["metrics"]["needs_business_input"] is True
     assert "Annex 3" in payload["matter_summary"]["missing_documents"]
+    assert payload["business_input"]["status"] == "needs_business_input"
+    assert payload["business_input"]["blocking_count"] == 1
+    assert payload["business_input"]["missing_items"][0]["label"] == "Annex 3"
+    assert "governed by Annex 2 and Annex 3" in payload["business_input"]["missing_items"][0]["source_quote"]
 
     detail = HistoryRepository(database_url).get_item(payload["history_thread_id"])
     assert detail is not None
     assert detail["contract_status"] == "needs_business_input"
     assert any(event["event_type"] == "needs_business_input" for event in detail["events"])
+
+
+async def test_pdf_upload_uses_openai_pdf_fallback_when_local_extraction_is_empty(monkeypatch):
+    monkeypatch.setattr(intake, "extract_document_text", lambda _filename, _content: "")
+
+    async def _fake_openai_pdf_text(filename: str, content: bytes) -> str:
+        assert filename == "scanned-dpa.pdf"
+        assert content.startswith(b"%PDF")
+        return "DATA PROCESSING ADDENDUM\nBMW Group personal data is processed under Annex 1."
+
+    monkeypatch.setattr(intake, "_extract_pdf_text_with_openai", _fake_openai_pdf_text)
+
+    extracted = await intake._extract_uploaded_texts([_upload_file("scanned-dpa.pdf", b"%PDF-1.4 image only")])
+
+    assert extracted == [
+        {
+            "filename": "scanned-dpa.pdf",
+            "text": "DATA PROCESSING ADDENDUM\nBMW Group personal data is processed under Annex 1.",
+            "character_count": 76,
+            "extraction_method": "openai_pdf_input",
+        }
+    ]
 
 
 def _upload_file(filename: str, content: bytes) -> UploadFile:

@@ -62,6 +62,29 @@ export type MatterSummary = {
   missing_documents: string[];
 };
 
+export type BusinessInputItem = {
+  label: string;
+  category: string;
+  severity: "blocking" | "warning" | "info" | string;
+  reason: string;
+  source_file?: string | null;
+  source_quote?: string | null;
+  user_action?: string;
+  confidence?: number;
+};
+
+export type BusinessInputCheck = {
+  status: "complete" | "needs_business_input" | string;
+  can_submit_to_legal: boolean;
+  blocking_count: number;
+  source: "openai" | "fallback_parser" | string;
+  user_message: string;
+  uploaded_files: Array<{ filename?: string; text_preview?: string; character_count?: number; extraction_method?: string }>;
+  missing_items: BusinessInputItem[];
+  expected_documents: Array<Record<string, unknown>>;
+  found_documents: Array<Record<string, unknown>>;
+};
+
 export type LegalSource = {
   title: string;
   source: string;
@@ -106,6 +129,7 @@ export type RunResult = {
   legal_answer: string;
   next_action: string;
   matter_summary: MatterSummary;
+  business_input?: BusinessInputCheck | null;
   agent_steps: AgentStep[];
   findings: Finding[];
   legal_sources: LegalSource[];

@@ -25,6 +25,7 @@ export async function analyzeMatter(payload: {
   isFinalVersion?: boolean;
   files: File[];
   demoMode?: boolean;
+  modelMode?: "quality" | "fast";
 }): Promise<RunResult> {
   const form = new FormData();
   form.append("message", payload.message);
@@ -34,17 +35,48 @@ export async function analyzeMatter(payload: {
   form.append("selected_sources", JSON.stringify([]));
   form.append("selected_agents", JSON.stringify([]));
   form.append("demo_mode", payload.demoMode ? "true" : "false");
+  form.append("model_mode", payload.modelMode ?? "quality");
   payload.files.forEach((file) => form.append("files", file));
 
-  const response = await fetch("/api/analyze", {
-    method: "POST",
-    body: form
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/analyze", {
+      method: "POST",
+      body: form
+    });
+  } catch (err) {
+    const detail = err instanceof Error && err.message ? ` (${err.message})` : "";
+    throw new Error(
+      `Upload failed before Donna reached the backend${detail}. Make sure the backend is running at http://127.0.0.1:8000 and try the drop again.`
+    );
+  }
   if (!response.ok) {
-    const detail = await response.text();
+    const detail = await readErrorDetail(response);
     throw new Error(detail || "Analysis failed");
   }
   return response.json();
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  const raw = await response.text();
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as { detail?: unknown };
+    if (typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail
+        .map((item) => {
+          if (item && typeof item === "object" && "msg" in item) {
+            return String((item as { msg?: unknown }).msg ?? item);
+          }
+          return String(item);
+        })
+        .join("; ");
+    }
+  } catch {
+    // Keep the server text if it was not JSON.
+  }
+  return raw;
 }
 
 export async function getHistory(): Promise<{ items: HistorySummary[] }> {

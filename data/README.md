@@ -4,16 +4,11 @@ This folder contains synthetic raw demo data for Harvey. The files are designed 
 
 ## Playbooks
 
-- `playbook/bmw_data_protection.csv`: backend-readable structured Datenschutz playbook.
+- `playbook/dpa_negotiation_playbook.md`: active backend-readable DPA negotiation playbook. The backend parses this Markdown into structured rule rows and also sends the full Markdown into the clause judge context.
 - `playbook/bmw_litigation.csv`: backend-readable structured German litigation playbook.
-- `playbook/BMW_Datenschutz_Playbook_2026.xlsx`: spreadsheet version for demos and uploads.
 - `playbook/BMW_German_Litigation_Playbook_2026.xlsx`: spreadsheet version for demos and uploads.
-- `playbook/BMW_Datenschutz_Playbook_2026.docx`: narrative playbook in the Siemens sample style.
 - `playbook/BMW_German_Litigation_Playbook_2026.docx`: narrative playbook in the Siemens sample style.
-- `playbook/bmw_group_dpa_negotiation_playbook.csv`: source-based DPA negotiation playbook normalized from `BMW Group DPA NEGOTIATION PLAYBOOK E.docx`.
-- `playbook/BMW_Group_DPA_Negotiation_Playbook_Source_Based.xlsx`: source-based spreadsheet playbook.
-- `playbook/BMW_Group_DPA_Negotiation_Playbook_Source_Based.docx`: source-based narrative playbook.
-- `playbook/BMW_Group_DPA_Negotiation_Playbook_Source_Based.pdf`: source-based PDF playbook.
+- `playbook/archive/`: older DPA CSV/PDF/DOCX/XLSX playbook variants retained for reference, not active backend routing.
 
 ## Legal Evidence
 

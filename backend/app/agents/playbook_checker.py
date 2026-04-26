@@ -1,33 +1,97 @@
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+import json
+import logging
+import re
+from typing import Any, Literal
 
-from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
+from pydantic import BaseModel, Field
+
+from app.agents.base import Agent, AgentResult, ContractTrigger, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
 from app.agents.trigger_utils import missing_term_trigger, sentence_trigger_for_phrase
-from app.services.playbook_repository import get_playbook_rule, playbook_file_label, playbook_source_label
+from app.core.config import get_settings
+from app.services.model_context import is_model_access_error, openai_model_candidates
+from app.services.playbook_repository import get_playbook_rule, load_playbook_markdown, load_playbook_rows, playbook_file_label, playbook_source_label
 
 
 PLAYBOOK_SOURCE = "BMW playbook"
+logger = logging.getLogger(__name__)
+
+
+class PlaybookJudgeDeviation(BaseModel):
+    rule_id: str
+    title: str
+    description: str
+    severity: Literal["info", "low", "medium", "high", "blocker"]
+    requires_escalation: bool
+    clause_text: str
+    approved_fix: str
+    rationale: str
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+
+
+class PlaybookJudgeResult(BaseModel):
+    domain: Literal["data_protection", "litigation", "mixed", "general"]
+    findings: list[PlaybookJudgeDeviation] = Field(default_factory=list)
+    summary: str
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
 
 
 class PlaybookCheckerAgent(Agent):
     name = "playbook_checker"
 
     async def run(self, context: ReviewContext) -> AgentResult:
+        uploaded_playbook_evidence = _uploaded_playbook_evidence(context.playbook_documents)
+        fallback_result = await self._fallback_run(context, uploaded_playbook_evidence)
+
+        judge_result = await _openai_playbook_judge(context)
+        if judge_result is None:
+            fallback_result.metadata["playbook_judge_source"] = "fallback_rules"
+            return fallback_result
+
+        llm_findings, llm_suggestions = _findings_from_judge_result(
+            judge_result,
+            context,
+            uploaded_playbook_evidence,
+        )
+        findings = _dedupe_findings([*llm_findings, *fallback_result.findings])
+        suggestions = _dedupe_suggestions([*llm_suggestions, *fallback_result.suggestions], findings)
+        return AgentResult(
+            agent_name=self.name,
+            summary=judge_result.summary or "LLM judge compared draft clauses against the BMW playbook.",
+            findings=findings,
+            suggestions=suggestions,
+            confidence=min(judge_result.confidence, fallback_result.confidence or judge_result.confidence),
+            requires_escalation=any(f.requires_escalation for f in findings),
+            metadata={
+                **fallback_result.metadata,
+                "playbook_judge_source": "openai_structured_judge",
+                "llm_judge_domain": judge_result.domain,
+                "llm_judge_finding_count": len(llm_findings),
+                "fallback_finding_count": len(fallback_result.findings),
+            },
+        )
+
+    async def _fallback_run(
+        self,
+        context: ReviewContext,
+        uploaded_playbook_evidence: list[Evidence] | None = None,
+    ) -> AgentResult:
         findings: list[Finding] = []
         suggestions: list[Suggestion] = []
         text = context.contract_text.lower()
-        uploaded_playbook_evidence = _uploaded_playbook_evidence(context.playbook_documents)
+        uploaded_playbook_evidence = uploaded_playbook_evidence or _uploaded_playbook_evidence(context.playbook_documents)
         dp_001 = get_playbook_rule("data_protection", "DP-001")
         dp_002 = get_playbook_rule("data_protection", "DPA-002")
         dp_003 = get_playbook_rule("data_protection", "DPA-003")
-        dp_004 = get_playbook_rule("data_protection", "DPA-001")
-        dp_005 = get_playbook_rule("data_protection", "DPA-005")
-        dp_006 = get_playbook_rule("data_protection", "DPA-004")
-        dp_007 = get_playbook_rule("data_protection", "DPA-007")
-        dp_008 = get_playbook_rule("data_protection", "DPA-008")
-        dp_009 = get_playbook_rule("data_protection", "DPA-006")
-        dp_011 = get_playbook_rule("data_protection", "DPA-001")
+        dp_004 = get_playbook_rule("data_protection", "DPA-004")
+        dp_005 = get_playbook_rule("data_protection", "DPA-007")
+        dp_006 = get_playbook_rule("data_protection", "DPA-001")
+        dp_007 = get_playbook_rule("data_protection", "DPA-006")
+        dp_008 = get_playbook_rule("data_protection", "DPA-003")
+        dp_009 = get_playbook_rule("data_protection", "DPA-004")
+        dp_011 = get_playbook_rule("data_protection", "DPA-004")
         lt_002 = get_playbook_rule("litigation", "LT-002")
         lt_003 = get_playbook_rule("litigation", "LT-003")
         lt_004 = get_playbook_rule("litigation", "LT-004")
@@ -255,7 +319,14 @@ class PlaybookCheckerAgent(Agent):
                 proposed_text=str(dp_009.get("approved_fix") or "Require return or deletion within 30 days and backup purge within 90 days."),
             )
 
-        if "ai models" in text or "model training" in text or "synthetic-data generators" in text:
+        if (
+            "ai models" in text
+            or "model training" in text
+            or "synthetic-data generators" in text
+            or "large-language model" in text
+            or ("training" in text and "fine-tuning" in text and "personal data" in text)
+            or ("embeddings" in text and "weights" in text and "personal data" in text)
+        ):
             _add_rule_finding(
                 findings,
                 suggestions,
@@ -266,10 +337,54 @@ class PlaybookCheckerAgent(Agent):
                 finding_id="ai-training-rights",
                 title="Supplier AI training rights need approval",
                 description="The draft lets the supplier use BMW data or derived data for model improvement without a separate BMW approval path.",
-                phrase="ai models" if "ai models" in text else "model training" if "model training" in text else "synthetic-data generators",
+                phrase=_first_present_phrase(
+                    text,
+                    [
+                        "large-language model",
+                        "training, fine-tuning",
+                        "embeddings, weights",
+                        "ai models",
+                        "model training",
+                        "synthetic-data generators",
+                    ],
+                ),
                 severity=Severity.HIGH,
                 requires_escalation=True,
                 proposed_text=str(dp_011.get("approved_fix") or "Remove AI training rights unless separately approved by BMW."),
+            )
+
+        if (
+            "standard contractual clauses" in text
+            and ("not necessary" in text or "no standard contractual clauses" in text or "shall be entered into" in text)
+        ) or (
+            ("texas" in text or "singapore" in text or "international waters" in text or "outside the territorial jurisdiction" in text)
+            and ("personal data" in text or "processing infrastructure" in text or "backup replication" in text)
+        ):
+            _add_rule_finding(
+                findings,
+                suggestions,
+                context,
+                uploaded_playbook_evidence,
+                scope="data_protection",
+                rule=dp_007,
+                finding_id="third-country-transfer-incomplete",
+                title="Third-country safeguards are rejected or incomplete",
+                description="The draft treats offshore or third-country processing as outside GDPR safeguards and rejects SCCs, transfer assessment, or supplementary measures.",
+                phrase=_first_present_phrase(
+                    text,
+                    [
+                        "no standard contractual clauses",
+                        "standard contractual clauses",
+                        "transfer impact assessment",
+                        "international waters",
+                        "backup replication",
+                        "texas",
+                        "singapore",
+                    ],
+                ),
+                severity=Severity.BLOCKER,
+                requires_escalation=True,
+                proposed_text=str(dp_007.get("approved_fix") or "List and approve all third-country access before any transfer or remote access."),
             )
 
         if "may recommend and negotiate nuisance settlements" in text:
@@ -407,6 +522,309 @@ class PlaybookCheckerAgent(Agent):
         )
 
 
+async def _openai_playbook_judge(context: ReviewContext) -> PlaybookJudgeResult | None:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return None
+    if settings.openai_api_key == "test-key":
+        return None
+
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        logger.warning("openai package is not installed; using playbook fallback rules")
+        return None
+
+    rows = _scoped_playbook_rows(context)
+    if not rows:
+        return None
+    playbook_markdown = load_playbook_markdown("data_protection") if _judge_includes_domain(context, "data_protection") else ""
+
+    try:
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        last_error: Exception | None = None
+        for model in openai_model_candidates(settings):
+            try:
+                response = await asyncio.wait_for(
+                    client.responses.create(
+                        model=model,
+                        reasoning={"effort": settings.openai_reasoning_effort or "low"},
+                        input=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are Harvey's BMW playbook clause judge. Compare the submitted contract clauses against "
+                                    "the supplied BMW playbook rows. Report only material deviations from preferred, fallback, "
+                                    "or red-line positions. Use the playbook severity unless the clause is clearly less serious. "
+                                    "Treat red-line language, escalation triggers, AI/model training on BMW personal data, "
+                                    "third-country transfers without SCC/TIA safeguards, unlimited liability, and matters outside "
+                                    "the active playbooks as escalation-worthy. Return JSON only."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": json.dumps(
+                                    {
+                                        "contract_type": context.contract_type or "unknown",
+                                        "playbook_rows": rows,
+                                        "full_relevant_playbook_context": playbook_markdown or _format_rows_as_full_context(rows),
+                                        "contract_text": _contract_excerpt(context.contract_text),
+                                        "required_behavior": (
+                                            "Read the contract clause by clause. For each clause that conflicts with the BMW "
+                                            "playbook, return the exact clause text, the matched playbook rule id, why it conflicts, "
+                                            "whether Legal escalation is required, and the approved BMW fix. Do not report compliant "
+                                            "clauses. The full relevant playbook context is authoritative and must be considered "
+                                            "for every clause judgment."
+                                        ),
+                                    },
+                                    ensure_ascii=True,
+                                ),
+                            },
+                        ],
+                        text={
+                            "format": {
+                                "type": "json_schema",
+                                "name": "bmw_playbook_clause_judge",
+                                "strict": True,
+                                "schema": _judge_json_schema(),
+                            }
+                        },
+                        max_output_tokens=2600,
+                    ),
+                    timeout=max(settings.legal_data_hub_timeout, 60.0),
+                )
+                output_text = getattr(response, "output_text", "") or ""
+                return PlaybookJudgeResult.model_validate(json.loads(output_text))
+            except Exception as exc:
+                last_error = exc
+                if not is_model_access_error(exc):
+                    raise
+                logger.warning("OpenAI model %s unavailable for playbook judge; trying fallback model", model)
+        if last_error:
+            raise last_error
+        return None
+    except Exception as exc:
+        logger.warning("OpenAI playbook judge failed; using fallback rules: %s", exc)
+        return None
+
+
+def _scoped_playbook_rows(context: ReviewContext) -> list[dict[str, str]]:
+    domain = context.contract_type or ""
+    domains = ["data_protection"] if domain == "data_protection" else ["litigation"] if domain == "litigation" else ["data_protection", "litigation"]
+    rows: list[dict[str, str]] = []
+    for item in domains:
+        for row in load_playbook_rows(item):
+            rows.append(
+                {
+                    "domain": item,
+                    "id": str(row.get("id") or ""),
+                    "title": str(row.get("title") or ""),
+                    "severity": str(row.get("severity") or ""),
+                    "default": str(row.get("default") or ""),
+                    "preferred_position": str(row.get("preferred_position") or ""),
+                    "fallback_1": str(row.get("fallback_1") or ""),
+                    "fallback_2": str(row.get("fallback_2") or ""),
+                    "red_line": str(row.get("red_line") or ""),
+                    "escalation_trigger": str(row.get("escalation_trigger") or ""),
+                    "legal_basis": str(row.get("legal_basis") or ""),
+                    "approved_fix": str(row.get("approved_fix") or ""),
+                }
+            )
+    return rows
+
+
+def _judge_includes_domain(context: ReviewContext, domain: str) -> bool:
+    if context.contract_type == domain:
+        return True
+    return context.contract_type not in {"data_protection", "litigation"}
+
+
+def _format_rows_as_full_context(rows: list[dict[str, str]]) -> str:
+    parts = []
+    for row in rows:
+        parts.append(
+            "\n".join(
+                [
+                    f"{row.get('id')} - {row.get('title')} [{row.get('severity')}]",
+                    f"Standard: {row.get('preferred_position') or row.get('default')}",
+                    f"Fall-back 1: {row.get('fallback_1')}",
+                    f"Fall-back 2: {row.get('fallback_2')}",
+                    f"Red line: {row.get('red_line')}",
+                    f"Escalation trigger: {row.get('escalation_trigger')}",
+                    f"Approved fix: {row.get('approved_fix')}",
+                ]
+            )
+        )
+    return "\n\n".join(parts)
+
+
+def _judge_json_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "domain": {"type": "string", "enum": ["data_protection", "litigation", "mixed", "general"]},
+            "summary": {"type": "string"},
+            "confidence": {"type": "number"},
+            "findings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "rule_id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                        "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "blocker"]},
+                        "requires_escalation": {"type": "boolean"},
+                        "clause_text": {"type": "string"},
+                        "approved_fix": {"type": "string"},
+                        "rationale": {"type": "string"},
+                        "confidence": {"type": "number"},
+                    },
+                    "required": [
+                        "rule_id",
+                        "title",
+                        "description",
+                        "severity",
+                        "requires_escalation",
+                        "clause_text",
+                        "approved_fix",
+                        "rationale",
+                        "confidence",
+                    ],
+                },
+            },
+        },
+        "required": ["domain", "summary", "confidence", "findings"],
+    }
+
+
+def _findings_from_judge_result(
+    judge_result: PlaybookJudgeResult,
+    context: ReviewContext,
+    uploaded_playbook_evidence: list[Evidence],
+) -> tuple[list[Finding], list[Suggestion]]:
+    findings: list[Finding] = []
+    suggestions: list[Suggestion] = []
+    for index, deviation in enumerate(judge_result.findings, start=1):
+        scope = _scope_for_rule_id(deviation.rule_id, judge_result.domain)
+        rule = get_playbook_rule(scope, deviation.rule_id)
+        ruling = _ruling_reference(PLAYBOOK_SOURCE, scope, rule)
+        trigger = _trigger_for_clause(context.contract_text, deviation.clause_text)
+        finding_id = f"playbook-deviation-{_slugify(deviation.rule_id or str(index))}"
+        if len(judge_result.findings) > 1:
+            finding_id = f"{finding_id}-{_slugify(deviation.title)[:36]}"
+        findings.append(
+            Finding(
+                id=finding_id,
+                title=deviation.title,
+                description=deviation.description,
+                severity=Severity(deviation.severity),
+                clause_reference=trigger.text if trigger else deviation.clause_text,
+                trigger=trigger,
+                ruling=ruling,
+                evidence=[
+                    Evidence(
+                        source="OpenAI playbook clause judge",
+                        citation=f"{deviation.rule_id} deviation rationale",
+                        quote=deviation.rationale,
+                    ),
+                    _evidence_from_ruling(ruling),
+                    *uploaded_playbook_evidence,
+                ],
+                requires_escalation=deviation.requires_escalation,
+            )
+        )
+        suggestions.append(
+            Suggestion(
+                finding_id=finding_id,
+                proposed_text=deviation.approved_fix or str(rule.get("approved_fix") or ""),
+                rationale=deviation.rationale or f"BMW playbook rule {deviation.rule_id} sets the approved position.",
+            )
+        )
+    return findings, suggestions
+
+
+def _scope_for_rule_id(rule_id: str, fallback_domain: str) -> str:
+    normalized = rule_id.upper()
+    if normalized.startswith("LT-"):
+        return "litigation"
+    if normalized.startswith(("DPA-", "DP-")):
+        return "data_protection"
+    if fallback_domain == "litigation":
+        return "litigation"
+    return "data_protection"
+
+
+def _trigger_for_clause(contract_text: str, clause_text: str) -> ContractTrigger | None:
+    compact_clause = _compact(clause_text)
+    if not compact_clause:
+        return None
+    compact_contract = _compact(contract_text)
+    compact_index = compact_contract.lower().find(compact_clause.lower())
+    if compact_index >= 0:
+        original_start = _approximate_original_offset(contract_text, compact_index)
+        original_end = min(len(contract_text), original_start + len(compact_clause))
+        return ContractTrigger(text=compact_clause, start=original_start, end=original_end)
+    key_phrase = " ".join(compact_clause.split()[:8])
+    return sentence_trigger_for_phrase(contract_text, key_phrase) or missing_term_trigger(contract_text, compact_clause[:180])
+
+
+def _approximate_original_offset(text: str, compact_index: int) -> int:
+    compact_seen = 0
+    in_space = False
+    for index, char in enumerate(text):
+        if char.isspace():
+            if not in_space:
+                if compact_seen >= compact_index:
+                    return index
+                compact_seen += 1
+            in_space = True
+            continue
+        in_space = False
+        if compact_seen >= compact_index:
+            return index
+        compact_seen += 1
+    return 0
+
+
+def _contract_excerpt(contract_text: str) -> str:
+    compact = _compact(contract_text)
+    if len(compact) <= 16000:
+        return compact
+    return f"{compact[:8000]}\n\n[...middle omitted for token budget...]\n\n{compact[-8000:]}"
+
+
+def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
+    deduped: list[Finding] = []
+    seen_ids: set[str] = set()
+    seen_pairs: set[tuple[str, str]] = set()
+    for finding in findings:
+        pair = (_compact(finding.clause_reference or ""), finding.ruling.citation if finding.ruling else finding.id)
+        if finding.id in seen_ids or pair in seen_pairs:
+            continue
+        seen_ids.add(finding.id)
+        seen_pairs.add(pair)
+        deduped.append(finding)
+    return deduped
+
+
+def _dedupe_suggestions(suggestions: list[Suggestion], findings: list[Finding]) -> list[Suggestion]:
+    finding_ids = {finding.id for finding in findings}
+    deduped: list[Suggestion] = []
+    seen: set[tuple[str, str]] = set()
+    for suggestion in suggestions:
+        if suggestion.finding_id not in finding_ids:
+            continue
+        key = (suggestion.finding_id, suggestion.proposed_text)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(suggestion)
+    return deduped
+
+
 def _uploaded_playbook_evidence(documents: list[dict]) -> list[Evidence]:
     evidence: list[Evidence] = []
     for document in documents[:3]:
@@ -476,3 +894,19 @@ def _evidence_from_ruling(ruling: RulingReference) -> Evidence:
         quote=ruling.quote,
         url=ruling.url,
     )
+
+
+def _first_present_phrase(text: str, phrases: list[str]) -> str:
+    for phrase in phrases:
+        if phrase.lower() in text:
+            return phrase
+    return phrases[0]
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "finding"
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()

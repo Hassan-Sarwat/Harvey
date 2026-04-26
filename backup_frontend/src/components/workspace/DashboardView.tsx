@@ -247,7 +247,7 @@ const KpiCard = ({
   <motion.div
     initial={{ opacity: 0, y: 8 }}
     animate={{ opacity: 1, y: 0 }}
-    className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card relative overflow-hidden"
+    className="rounded-2xl border border-border/60 surface-card p-5 shadow-card relative overflow-hidden"
   >
     <div
       className="absolute -top-12 -right-12 h-32 w-32 rounded-full blur-3xl opacity-30"
@@ -280,7 +280,7 @@ const Section = ({
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
     </div>
-    <div className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card">{children}</div>
+    <div className="rounded-2xl border border-border/60 surface-card p-5 shadow-card">{children}</div>
   </div>
 );
 

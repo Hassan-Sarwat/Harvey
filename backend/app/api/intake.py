@@ -1,25 +1,37 @@
 from __future__ import annotations
 
+import base64
 import json
+import logging
 from collections import Counter
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.agents.base import AgentResult, Finding, ReviewContext, Severity
+from app.core.config import get_settings
 from app.services.document_ingestion import extract_document_text
 from app.services.escalation_repository import EscalationRepository
 from app.services.history_repository import APPROVED, NEEDS_BUSINESS_INPUT, PENDING_LEGAL, HistoryRepository
 from app.services.contract_classifier import classify_contract_type, infer_contract_type_fallback
+from app.services.model_context import (
+    current_model_mode,
+    current_openai_model,
+    is_model_access_error,
+    openai_model_candidates,
+    reset_model_mode,
+    set_model_mode,
+)
 from app.workflows.general_question import GeneralQuestionRequest, GeneralQuestionWorkflow
 from app.workflows.legal_qa import LegalQARequest, LegalQAWorkflow
 from app.workflows.review_contract import ContractReviewWorkflow
 
 
 router = APIRouter(prefix="/api", tags=["intake"])
+logger = logging.getLogger(__name__)
 
 APP_NAME = "BMW Legal Agent Platform"
 WORKFLOW_NAME = "Ask Donna"
@@ -182,10 +194,10 @@ async def demo() -> dict[str, Any]:
         mode="contract_review",
         thread_id=None,
         is_final_version=False,
-        selected_sources=["bmw_data_protection_playbook", "legal_data_hub", "uploaded_bundle"],
-        selected_agents=[],
-        uploaded_texts=[{"filename": sample_path.name, "text": contract_text}],
-        demo_mode=True,
+    selected_sources=["bmw_data_protection_playbook", "legal_data_hub", "uploaded_bundle"],
+    selected_agents=[],
+    uploaded_texts=[{"filename": sample_path.name, "text": contract_text}],
+    demo_mode=True,
     )
 
 
@@ -200,6 +212,7 @@ async def analyze(
     selected_sources: str = Form(default="[]"),
     selected_agents: str = Form(default="[]"),
     demo_mode: bool = Form(default=False),
+    model_mode: str = Form(default="quality"),
     files: list[UploadFile] | None = File(default=None),
 ) -> dict[str, Any]:
     question = _optional_form_value(question)
@@ -211,20 +224,25 @@ async def analyze(
     selected_sources = _optional_form_value(selected_sources) or "[]"
     selected_agents = _optional_form_value(selected_agents) or "[]"
     demo_mode = bool(_optional_form_value(demo_mode) or False)
+    model_mode = _optional_form_value(model_mode) or "quality"
     parsed_sources = _parse_json_string_list(selected_sources, "selected_sources")
     parsed_agents = _parse_json_string_list(selected_agents, "selected_agents")
     uploaded_texts = await _extract_uploaded_texts(files or [])
-    return await _run_intake(
-        message=message if message is not None else question,
-        context=context,
-        mode=mode,
-        thread_id=thread_id,
-        is_final_version=is_final_version,
-        selected_sources=parsed_sources,
-        selected_agents=parsed_agents,
-        uploaded_texts=uploaded_texts,
-        demo_mode=demo_mode,
-    )
+    model_token = set_model_mode(model_mode)
+    try:
+        return await _run_intake(
+            message=message if message is not None else question,
+            context=context,
+            mode=mode,
+            thread_id=thread_id,
+            is_final_version=is_final_version,
+            selected_sources=parsed_sources,
+            selected_agents=parsed_agents,
+            uploaded_texts=uploaded_texts,
+            demo_mode=demo_mode,
+        )
+    finally:
+        reset_model_mode(model_token)
 
 
 async def _run_intake(
@@ -236,7 +254,7 @@ async def _run_intake(
     is_final_version: bool,
     selected_sources: list[str],
     selected_agents: list[str],
-    uploaded_texts: list[dict[str, str]],
+    uploaded_texts: list[dict[str, Any]],
     demo_mode: bool,
 ) -> dict[str, Any]:
     question = (message or "").strip()
@@ -317,6 +335,7 @@ async def _run_intake(
         "legal_answer": _legal_answer(legal_qa),
         "next_action": _next_action(review_result, legal_qa_escalate=False, contract_status=contract_status),
         "matter_summary": _matter_summary(contract_text, contract_type, uploaded_texts, review_result, legal_escalation_triggered),
+        "business_input": _business_input_payload(review_result, uploaded_texts),
         "agent_steps": _agent_steps(review_result, created_at),
         "findings": [_finding_payload(finding) for finding in review_result.findings],
         "legal_sources": legal_sources,
@@ -333,6 +352,8 @@ async def _run_intake(
             "contract_type": contract_type,
             "contract_classification_source": classification.source,
             "contract_classification_confidence": classification.confidence,
+            "model_mode": current_model_mode(),
+            "openai_model": current_openai_model(get_settings()),
             "uploaded_documents": len(uploaded_texts),
             "legal_qa_escalate": legal_qa.escalate,
             "answer_kind": getattr(legal_qa, "answer_kind", "rule_specific"),
@@ -361,7 +382,7 @@ async def _run_general_question(
     question: str,
     context: str,
     thread_id: str | None,
-    uploaded_texts: list[dict[str, str]],
+    uploaded_texts: list[dict[str, Any]],
     demo_mode: bool,
 ) -> dict[str, Any]:
     created_at = datetime.now(UTC).isoformat()
@@ -374,7 +395,7 @@ async def _run_general_question(
             context=context,
             contract_type=contract_type,
             thread_id=thread_id,
-            uploaded_documents=uploaded_texts,
+            uploaded_documents=_uploaded_document_text_payload(uploaded_texts),
         )
     )
     resolved_domain = general_qa.domain
@@ -408,6 +429,7 @@ async def _run_general_question(
             "uploaded_documents": len(uploaded_texts),
             "missing_documents": [],
         },
+        "business_input": None,
         "agent_steps": _general_agent_steps(general_qa, created_at),
         "findings": [],
         "legal_sources": legal_sources,
@@ -423,6 +445,8 @@ async def _run_general_question(
             "contract_type": resolved_domain,
             "contract_classification_source": classification.source,
             "contract_classification_confidence": classification.confidence,
+            "model_mode": current_model_mode(),
+            "openai_model": current_openai_model(get_settings()),
             "uploaded_documents": len(uploaded_texts),
             "legal_qa_escalate": general_qa.escalate,
             "answer_kind": general_qa.answer_kind,
@@ -497,20 +521,125 @@ def _empty_agent_metric(agent_id: str) -> dict[str, Any]:
     }
 
 
-async def _extract_uploaded_texts(files: list[UploadFile]) -> list[dict[str, str]]:
-    extracted: list[dict[str, str]] = []
+async def _extract_uploaded_texts(files: list[UploadFile]) -> list[dict[str, Any]]:
+    extracted: list[dict[str, Any]] = []
     for file in files:
         filename = file.filename or "uploaded-document"
         content = await file.read()
         if not content:
             continue
+        text = ""
+        extraction_method = "local_parser"
         try:
             text = extract_document_text(filename, content)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.warning("Local document extraction failed for %s: %s", filename, exc)
+
+        if _is_pdf(filename) and not _has_meaningful_text(text):
+            openai_text = await _extract_pdf_text_with_openai(filename, content)
+            if openai_text.strip():
+                text = openai_text
+                extraction_method = "openai_pdf_input"
+
         if text.strip():
-            extracted.append({"filename": filename, "text": text})
+            extracted.append(
+                {
+                    "filename": filename,
+                    "text": text,
+                    "character_count": len(text),
+                    "extraction_method": extraction_method,
+                }
+            )
+            continue
+
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Could not extract readable text from {filename}. If this is a scanned PDF, keep OPENAI_API_KEY "
+                "configured so Donna can use OpenAI PDF input fallback, or upload an OCR/text version."
+            ),
+        )
     return extracted
+
+
+def _is_pdf(filename: str) -> bool:
+    return PurePosixPath(filename.lower()).suffix == ".pdf"
+
+
+def _uploaded_document_text_payload(uploaded_texts: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return [
+        {
+            "filename": str(item.get("filename") or "uploaded-document"),
+            "text": str(item.get("text") or item.get("text_preview") or ""),
+        }
+        for item in uploaded_texts
+    ]
+
+
+def _has_meaningful_text(text: str) -> bool:
+    stripped = text.strip()
+    if len(stripped) < 20:
+        return False
+    alnum_count = sum(1 for character in stripped if character.isalnum())
+    return alnum_count >= 12 and alnum_count / max(len(stripped), 1) > 0.2
+
+
+async def _extract_pdf_text_with_openai(filename: str, content: bytes) -> str:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return ""
+
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        logger.warning("openai package is not installed; cannot use PDF input fallback")
+        return ""
+
+    try:
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        encoded = base64.b64encode(content).decode("utf-8")
+        last_error: Exception | None = None
+        for model in openai_model_candidates(settings):
+            try:
+                response = await client.responses.create(
+                    model=model,
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_file",
+                                    "filename": filename,
+                                    "file_data": f"data:application/pdf;base64,{encoded}",
+                                },
+                                {
+                                    "type": "input_text",
+                                    "text": (
+                                        "Extract the readable text from this PDF for a legal contract review pipeline. "
+                                        "Preserve clause order, headings, annex references, signature lines, and page breaks "
+                                        "where visible. Do not summarize, analyze, or add commentary. If no text is readable, "
+                                        "return an empty string."
+                                    ),
+                                },
+                            ],
+                        }
+                    ],
+                    max_output_tokens=8000,
+                )
+                return getattr(response, "output_text", "") or ""
+            except Exception as exc:
+                last_error = exc
+                if not is_model_access_error(exc):
+                    raise
+                logger.warning("OpenAI model %s unavailable for PDF input fallback; trying fallback model", model)
+        if last_error:
+            raise last_error
+        return ""
+    except Exception as exc:
+        logger.warning("OpenAI PDF input fallback failed for %s: %s", filename, exc)
+        return ""
 
 
 def _parse_json_string_list(raw: str, field_name: str) -> list[str]:
@@ -564,7 +693,7 @@ def _history_message(question: str, context: str) -> str:
     return question
 
 
-def _combined_contract_text(question: str, context: str, uploaded_texts: list[dict[str, str]]) -> str:
+def _combined_contract_text(question: str, context: str, uploaded_texts: list[dict[str, Any]]) -> str:
     parts = [f"User question: {question}"]
     if context:
         parts.append(f"Business context:\n{context}")
@@ -586,7 +715,7 @@ def _auto_route_agents(text: str, contract_type: str) -> list[str]:
     return routed
 
 
-def _auto_sources(contract_type: str, legal_basis: list[dict[str, Any]], uploaded_texts: list[dict[str, str]]) -> list[str]:
+def _auto_sources(contract_type: str, legal_basis: list[dict[str, Any]], uploaded_texts: list[dict[str, Any]]) -> list[str]:
     sources = ["bmw_litigation_playbook" if contract_type == "litigation" else "bmw_data_protection_playbook"]
     if legal_basis:
         sources.append("legal_data_hub")
@@ -599,7 +728,7 @@ def _source_usage(
     selected_sources: list[str],
     company_basis: list[dict[str, Any]],
     legal_sources: list[dict[str, Any]],
-    uploaded_texts: list[dict[str, str]],
+    uploaded_texts: list[dict[str, Any]],
     contract_type: str,
 ) -> list[dict[str, Any]]:
     labels = {item["id"]: item["label"] for item in SOURCES}
@@ -682,16 +811,42 @@ def _plain_answer(
     if contract_status == APPROVED:
         return "The final version is approved for the demo workflow because the review found no unresolved playbook or legal checks."
     if contract_status == NEEDS_BUSINESS_INPUT:
-        return "The final version needs business input before Donna can send the escalation package to Legal."
+        return _needs_input_answer(result)
     if contract_status == PENDING_LEGAL:
         return "The final version is stored as pending Legal because unresolved findings or escalation triggers remain."
     if escalation_state == "Needs business input":
-        return "Donna found Legal escalation triggers, but the ticket package is missing referenced material that business should provide first."
+        return _needs_input_answer(result)
     if escalation_state == "Legal review required before signature" or legal_qa_escalate:
         return "Do not proceed on the current draft without Legal review. The run found red-line or high-risk positions that need a legal decision."
     if result.findings:
         return "You can continue business review only after addressing the listed playbook deviations and keeping Legal available for unresolved points."
     return "No legal escalation is recommended based on the submitted context and BMW playbook checks."
+
+
+def _needs_input_answer(result: AgentResult) -> str:
+    escalation_findings = _legal_escalation_findings(result)
+    reason = "the playbook/legal review found an unresolved escalation trigger"
+    if escalation_findings:
+        top = escalation_findings[0]
+        reason = f"the playbook/legal review found: {top.title}"
+    missing = _completeness_missing_labels(result)
+    missing_sentence = f" Next step: add {', '.join(missing[:3])} to the ticket package" if missing else " Next step: add the missing referenced file"
+    if len(missing) > 3:
+        missing_sentence += f" and {len(missing) - 3} more item(s)"
+    return (
+        f"Legal escalation is recommended because {reason}. "
+        f"Before Donna sends the ticket to Legal, the package must be complete.{missing_sentence}, "
+        "or record why the item is unavailable, then rerun the review."
+    )
+
+
+def _legal_escalation_findings(result: AgentResult) -> list[Finding]:
+    prioritized = [
+        finding
+        for finding in _non_completeness_findings(result)
+        if finding.severity in {Severity.HIGH, Severity.BLOCKER} or finding.requires_escalation
+    ]
+    return prioritized or _non_completeness_findings(result)
 
 
 def _legal_answer(legal_qa: Any) -> str:
@@ -795,7 +950,7 @@ def _next_action(result: AgentResult, legal_qa_escalate: bool, contract_status: 
     if contract_status == APPROVED:
         return "The contract is stored in History as approved."
     if contract_status == NEEDS_BUSINESS_INPUT or (legal_escalation_triggered and _needs_business_input(result)):
-        return "Ask the business owner to upload the missing referenced file(s) or record why they are unavailable, then rerun before sending to Legal."
+        return "Ask the business owner to upload the missing referenced file(s), or record why they are unavailable, then rerun before sending to Legal."
     if contract_status == PENDING_LEGAL:
         return "Open the History record or escalation context for Legal review before signature."
     if legal_escalation_triggered:
@@ -843,6 +998,7 @@ def _visible_reasoning(payload: dict[str, Any]) -> dict[str, Any]:
         "agent_steps": payload.get("agent_steps") or [],
         "findings": payload.get("findings") or [],
         "source_usage": payload.get("source_usage") or [],
+        "business_input": payload.get("business_input"),
         "contract_status": payload.get("contract_status"),
         "is_final_version": payload.get("is_final_version", False),
     }
@@ -885,10 +1041,52 @@ def _completeness_missing_labels(result: AgentResult) -> list[str]:
     return labels
 
 
+def _business_input_payload(result: AgentResult, uploaded_texts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for agent_result in result.metadata.get("agent_results", []) or []:
+        if agent_result.get("agent_name") != "completeness_checker":
+            continue
+        metadata = agent_result.get("metadata", {}) or {}
+        missing_items = metadata.get("missing_items") or []
+        if not missing_items and metadata.get("status") != "needs_business_input":
+            return None
+        return {
+            "status": metadata.get("status") or "complete",
+            "can_submit_to_legal": bool(metadata.get("can_submit_to_legal")),
+            "blocking_count": int(metadata.get("blocking_count") or 0),
+            "source": metadata.get("source") or "unknown",
+            "user_message": metadata.get("user_message") or "",
+            "uploaded_files": [
+                {
+                    "filename": item.get("filename"),
+                    "character_count": item.get("character_count") or len(item.get("text") or item.get("text_preview") or ""),
+                    "extraction_method": item.get("extraction_method") or "local_parser",
+                    "text_preview": (item.get("text") or item.get("text_preview") or "")[:500],
+                }
+                for item in uploaded_texts
+            ],
+            "missing_items": [
+                {
+                    "label": item.get("label"),
+                    "category": item.get("category"),
+                    "severity": item.get("severity"),
+                    "reason": item.get("reason"),
+                    "source_file": item.get("source_file"),
+                    "source_quote": item.get("source_quote"),
+                    "user_action": item.get("user_action"),
+                    "confidence": item.get("confidence"),
+                }
+                for item in missing_items
+            ],
+            "expected_documents": metadata.get("expected_documents") or [],
+            "found_documents": metadata.get("found_documents") or [],
+        }
+    return None
+
+
 def _matter_summary(
     contract_text: str,
     contract_type: str,
-    uploaded_texts: list[dict[str, str]],
+    uploaded_texts: list[dict[str, Any]],
     result: AgentResult,
     legal_escalation_triggered: bool = False,
 ) -> dict[str, Any]:

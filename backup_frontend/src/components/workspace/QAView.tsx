@@ -65,7 +65,7 @@ export const QAView = () => {
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    className="rounded-2xl border border-border/60 gradient-card p-4 text-left text-sm hover:border-primary/60 transition-colors"
+                    className="rounded-2xl border border-border/60 surface-card p-4 text-left text-sm hover:border-primary/60 transition-colors"
                   >
                     <Sparkles className="h-4 w-4 text-primary mb-2" />
                     {s}
@@ -84,7 +84,7 @@ export const QAView = () => {
                     className={m.role === "user" ? "flex justify-end" : "flex gap-3"}
                   >
                     {m.role === "assistant" && (
-                      <div className="h-8 w-8 rounded-lg gradient-primary grid place-items-center shrink-0 mt-1">
+                      <div className="h-8 w-8 rounded-lg surface-primary grid place-items-center shrink-0 mt-1">
                         <Sparkles className="h-4 w-4 text-primary-foreground" />
                       </div>
                     )}
@@ -92,7 +92,7 @@ export const QAView = () => {
                       className={
                         m.role === "user"
                           ? "max-w-[80%] rounded-2xl rounded-tr-sm bg-primary text-primary-foreground px-4 py-3 text-sm whitespace-pre-wrap"
-                          : "flex-1 min-w-0 rounded-2xl border border-border/60 gradient-card p-4 text-sm"
+                          : "flex-1 min-w-0 rounded-2xl border border-border/60 surface-card p-4 text-sm"
                       }
                     >
                       {m.role === "assistant" ? (
@@ -149,7 +149,7 @@ export const QAView = () => {
               size="sm"
               onClick={() => send(input)}
               disabled={loading || !input.trim()}
-              className="m-2 gradient-primary border-0 text-primary-foreground"
+              className="m-2 surface-primary border-0 text-primary-foreground"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>

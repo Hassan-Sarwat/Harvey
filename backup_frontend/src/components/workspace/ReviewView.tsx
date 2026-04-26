@@ -41,6 +41,7 @@ export const ReviewView = () => {
   const [identity, setIdentity] = useState<ContractIdentity>(DEFAULT_IDENTITY);
   const [loading, setLoading] = useState(false);
   const [escalatingKey, setEscalatingKey] = useState<string | null>(null);
+  const [draggingUpload, setDraggingUpload] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -59,6 +60,11 @@ export const ReviewView = () => {
       { role: "user", kind: "upload", fileName: file.name, preview },
     ]);
     void runReview(() => reviewContractFile(file, reviewIdentity));
+  };
+
+  const handleDroppedFiles = (files: FileList | File[]) => {
+    const file = Array.from(files)[0];
+    if (file) void handleFile(file);
   };
 
   const loadSample = () => {
@@ -159,7 +165,13 @@ export const ReviewView = () => {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 py-8">
             {empty ? (
-              <Welcome onSample={loadSample} onUpload={() => fileRef.current?.click()} />
+              <Welcome
+                onSample={loadSample}
+                onUpload={() => fileRef.current?.click()}
+                onDropFiles={handleDroppedFiles}
+                dragging={draggingUpload}
+                setDragging={setDraggingUpload}
+              />
             ) : (
               <div className="space-y-6">
                 <AnimatePresence initial={false}>
@@ -210,7 +222,30 @@ export const ReviewView = () => {
               </IdentityField>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card/60 shadow-card focus-within:border-primary/60 transition-colors">
+            <div
+              className={cn(
+                "rounded-2xl border border-border/80 bg-card/60 shadow-card focus-within:border-primary/60 transition-colors",
+                draggingUpload && "border-primary/70 bg-primary/5"
+              )}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setDraggingUpload(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setDraggingUpload(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDraggingUpload(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDraggingUpload(false);
+                handleDroppedFiles(event.dataTransfer.files);
+              }}
+            >
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -254,7 +289,7 @@ export const ReviewView = () => {
                   size="sm"
                   onClick={sendText}
                   disabled={loading || !input.trim()}
-                  className="gradient-primary border-0 text-primary-foreground"
+                  className="surface-primary border-0 text-primary-foreground"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
@@ -279,14 +314,26 @@ const IdentityField = ({ label, children }: { label: string; children: React.Rea
   </label>
 );
 
-const Welcome = ({ onSample, onUpload }: { onSample: () => void; onUpload: () => void }) => (
+const Welcome = ({
+  onSample,
+  onUpload,
+  onDropFiles,
+  dragging,
+  setDragging,
+}: {
+  onSample: () => void;
+  onUpload: () => void;
+  onDropFiles: (files: FileList | File[]) => void;
+  dragging: boolean;
+  setDragging: (dragging: boolean) => void;
+}) => (
   <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center pt-12">
     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/80 bg-card/60 text-xs text-muted-foreground mb-6">
       <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
       BMW playbook + German legal evidence
     </div>
     <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-      Review a contract in <span className="text-gradient">seconds</span>
+      Review a contract in <span className="text-primary-highlight">seconds</span>
     </h1>
     <p className="text-muted-foreground max-w-xl mx-auto mb-10">
       Drop a contract and Harvey will check the draft against BMW mock rules and legal evidence,
@@ -295,15 +342,36 @@ const Welcome = ({ onSample, onUpload }: { onSample: () => void; onUpload: () =>
     <div className="grid sm:grid-cols-2 gap-3 max-w-xl mx-auto">
       <button
         onClick={onUpload}
-        className="group rounded-2xl border border-border/60 gradient-card p-5 text-left hover:border-primary/60 transition-colors"
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          onDropFiles(event.dataTransfer.files);
+        }}
+        className={cn(
+          "group rounded-2xl border border-border/60 surface-card p-5 text-left hover:border-primary/60 transition-colors",
+          dragging && "border-primary/70 bg-primary/5"
+        )}
       >
         <Upload className="h-5 w-5 text-primary mb-2" />
-        <div className="font-semibold mb-1">Upload contract</div>
-        <div className="text-xs text-muted-foreground">PDF, Word, Excel, text, Markdown, CSV, or JSON.</div>
+        <div className="font-semibold mb-1">{dragging ? "Drop contract here" : "Upload contract"}</div>
+        <div className="text-xs text-muted-foreground">Drag and drop, or browse PDF, Word, Excel, text, Markdown, CSV, or JSON.</div>
       </button>
       <button
         onClick={onSample}
-        className="group rounded-2xl border border-border/60 gradient-card p-5 text-left hover:border-primary/60 transition-colors"
+        className="group rounded-2xl border border-border/60 surface-card p-5 text-left hover:border-primary/60 transition-colors"
       >
         <Sparkles className="h-5 w-5 text-primary mb-2" />
         <div className="font-semibold mb-1">Try a sample</div>
@@ -351,7 +419,7 @@ const MessageBubble = ({
   if (m.role === "assistant" && m.kind === "thinking") {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 text-muted-foreground">
-        <div className="h-8 w-8 rounded-lg gradient-primary grid place-items-center shrink-0">
+        <div className="h-8 w-8 rounded-lg surface-primary grid place-items-center shrink-0">
           <Loader2 className="h-4 w-4 animate-spin text-primary-foreground" />
         </div>
         <div className="text-sm">Checking the draft against the playbook and legal evidence...</div>
@@ -389,11 +457,11 @@ const AuditMessage = ({
   const Icon = v.icon;
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
-      <div className="h-8 w-8 rounded-lg gradient-primary grid place-items-center shrink-0 mt-1">
+      <div className="h-8 w-8 rounded-lg surface-primary grid place-items-center shrink-0 mt-1">
         <Sparkles className="h-4 w-4 text-primary-foreground" />
       </div>
       <div className="flex-1 space-y-4 min-w-0">
-        <div className="rounded-2xl border border-border/60 gradient-card p-5 shadow-card">
+        <div className="rounded-2xl border border-border/60 surface-card p-5 shadow-card">
           <div className="flex items-center gap-3 flex-wrap">
             <div
               className="h-10 w-10 rounded-lg grid place-items-center"
@@ -425,7 +493,7 @@ const AuditMessage = ({
             className="rounded-2xl border-2 p-4 flex items-start gap-3"
             style={{
               borderColor: "hsl(var(--warning) / 0.5)",
-              background: "linear-gradient(135deg, hsl(var(--warning) / 0.08), hsl(var(--warning) / 0.02))",
+              background: "hsl(var(--warning) / 0.08)",
             }}
           >
             <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "hsl(var(--warning))" }} />
@@ -457,7 +525,7 @@ const AuditMessage = ({
             className="rounded-2xl border-2 p-4 flex items-start gap-3"
             style={{
               borderColor: "hsl(var(--warning) / 0.5)",
-              background: "linear-gradient(135deg, hsl(var(--warning) / 0.08), hsl(var(--warning) / 0.02))",
+              background: "hsl(var(--warning) / 0.08)",
             }}
           >
             <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "hsl(var(--warning))" }} />
@@ -493,7 +561,7 @@ const ViolationCard = ({ v, index }: { v: ReviewViolation; index: number }) => {
   const sev = v.severity === "High" ? "high" : "medium";
   const rule = lookupRule(v.reference);
   return (
-    <div className={cn("rounded-2xl border border-border/60 gradient-card overflow-hidden shadow-card")}>
+    <div className={cn("rounded-2xl border border-border/60 surface-card overflow-hidden shadow-card")}>
       <div className="p-4 border-b border-border/60">
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className="text-[10px] font-mono text-muted-foreground">#{String(index).padStart(2, "0")}</span>

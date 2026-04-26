@@ -122,6 +122,7 @@ async def _openai_completeness_check(
     documents: list[dict[str, str]],
 ) -> CompletenessCheck | None:
     from app.core.config import get_settings
+    from app.services.model_context import is_model_access_error, openai_model_candidates
 
     settings = get_settings()
     if not settings.openai_api_key:
@@ -135,33 +136,48 @@ async def _openai_completeness_check(
 
     try:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.responses.create(
-            model=settings.openai_model,
-            reasoning={"effort": settings.openai_reasoning_effort or "low"},
-            input=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are Harvey's pre-Legal escalation completeness checker. Build a dynamic expected "
-                        "document list from the checklist and uploaded document content, compare it to the ticket's "
-                        "actual uploaded files, and return JSON only. Do not search external company data. Missing "
-                        "blocking information means needs_business_input, not Legal escalation."
-                    ),
-                },
-                {"role": "user", "content": _completion_prompt(context, documents)},
-            ],
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "ticket_completeness_check",
-                    "strict": True,
-                    "schema": _json_schema(),
-                },
-            },
-            max_output_tokens=1800,
-        )
-        output_text = getattr(response, "output_text", "") or ""
-        return CompletenessCheck.model_validate(json.loads(output_text))
+        last_error: Exception | None = None
+        for model in openai_model_candidates(settings):
+            try:
+                response = await client.responses.create(
+                    model=model,
+                    reasoning={"effort": settings.openai_reasoning_effort or "low"},
+                    input=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are Harvey's pre-Legal escalation file completeness checker. Only check whether "
+                                "documents explicitly referenced in the uploaded file content are present in the current "
+                                "ticket attachments. Examples: Annex 3, Attachment 8, Schedule A, Order Form, AGB, "
+                                "terms and conditions, master agreement, or framework agreement. Do not infer broad "
+                                "business metadata, deadlines, contract value, use case, BMW entity, or other checklist "
+                                "items. Do not search external company data. Missing referenced files mean "
+                                "needs_business_input, not Legal escalation. Quote the exact source passage that creates "
+                                "the file expectation and explain why the uploaded file inventory does not satisfy it."
+                            ),
+                        },
+                        {"role": "user", "content": _completion_prompt(context, documents)},
+                    ],
+                    text={
+                        "format": {
+                            "type": "json_schema",
+                            "name": "ticket_completeness_check",
+                            "strict": True,
+                            "schema": _json_schema(),
+                        },
+                    },
+                    max_output_tokens=12000,
+                )
+                output_text = getattr(response, "output_text", "") or ""
+                return CompletenessCheck.model_validate(json.loads(output_text))
+            except Exception as exc:
+                last_error = exc
+                if not is_model_access_error(exc):
+                    raise
+                logger.warning("OpenAI model %s unavailable for completeness check; trying fallback model", model)
+        if last_error:
+            raise last_error
+        return None
     except Exception as exc:
         logger.warning("OpenAI completeness check failed; using fallback parser: %s", exc)
         return None
@@ -169,11 +185,10 @@ async def _openai_completeness_check(
 
 def _completion_prompt(context: ReviewContext, documents: list[dict[str, str]]) -> str:
     checklist = [
-        "All annexes, attachments, schedules, exhibits, appendices, Anlagen, and Anhaenge referenced as part of the contract package must be present.",
-        "If only an order form is present but it references a master agreement, request the master agreement.",
-        "If a DPA mentions TOMs, subprocessors, SCCs, transfer assessments, security appendices, or audit evidence, referenced materials should be present.",
-        "Missing business context such as BMW entity, counterparty, use case, contract value, data categories, start date, or deadline should be flagged as business input.",
-        "Contradictions between the user's statement and uploaded documents should be flagged.",
+        "Flag only explicit references to separate documents that should be attached to the ticket.",
+        "Covered examples: annexes, attachments, schedules, exhibits, appendices, Anlagen, Anhaenge, order forms, AGB, terms and conditions, master agreements, framework agreements.",
+        "Do not flag missing business metadata, deadlines, contract value, use case, BMW entity, data categories, start date, or general background information.",
+        "Do not flag inferred documents unless the uploaded text expressly references a separate document.",
     ]
     return json.dumps(
         {
@@ -186,8 +201,11 @@ def _completion_prompt(context: ReviewContext, documents: list[dict[str, str]]) 
                 for item in documents
             ],
             "required_behavior": (
-                "Return every expected document or business input that is material before Legal receives the ticket. "
-                "If a document reference is found but no uploaded file clearly matches it, mark it as blocking."
+                "Return every explicitly referenced document that is missing from the current uploaded_file_inventory. "
+                "If a referenced document is found but no uploaded file clearly matches it by filename, title, or heading, "
+                "mark it as blocking. If no explicit referenced file is missing, return complete. For each missing file, "
+                "include the most exact label possible, the source file, a short source_quote, and a reason that compares "
+                "the expected file against the uploaded_file_inventory."
             ),
         },
         ensure_ascii=True,
@@ -303,6 +321,16 @@ FOLLOW_ON_PATTERN = re.compile(
     rf"^\s*(?:,|and|or|&|und|/)\s*(?:(?P<prefix>{PREFIX_PATTERN})\s+)?(?P<value>{VALUE_PATTERN})\b",
     re.IGNORECASE,
 )
+GENERIC_DOCUMENT_PATTERN = re.compile(
+    r"\b(?P<label>"
+    r"order form|"
+    r"master services agreement|master service agreement|master agreement|master framework agreement|"
+    r"rahmenvertrag|"
+    r"allgemeine gesch[aä]ftsbedingungen|agb|"
+    r"terms and conditions|standard terms"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def _fallback_completeness_check(context: ReviewContext, documents: list[dict[str, str]]) -> CompletenessCheck:
@@ -353,19 +381,6 @@ def _fallback_completeness_check(context: ReviewContext, documents: list[dict[st
             )
         )
 
-    if _is_vague_question(context.user_question or ""):
-        missing_items.append(
-            MissingCompletenessItem(
-                label="Concrete business question",
-                category="missing_business_context",
-                severity="warning",
-                reason="The business request is too vague for a complete Legal submission package.",
-                source_quote=context.user_question,
-                user_action="add_specific_business_question",
-                confidence=0.68,
-            )
-        )
-
     blocking = [item for item in missing_items if item.severity == "blocking"]
     return CompletenessCheck(
         can_submit_to_legal=not blocking,
@@ -402,6 +417,9 @@ def _extract_references(documents: list[dict[str, str]]) -> list[dict[str, str]]
             for value_prefix, value in values:
                 label = f"{value_prefix} {_format_reference_value(value)}"
                 references.append({"label": label, "source_file": filename, "source_quote": quote})
+        for match in GENERIC_DOCUMENT_PATTERN.finditer(text):
+            label = _generic_document_label(match.group("label"))
+            references.append({"label": label, "source_file": filename, "source_quote": _sentence_around(text, match.start())})
     return references
 
 
@@ -424,6 +442,21 @@ def _canonical_prefix(raw: str) -> str:
 
 def _format_reference_value(raw: str) -> str:
     return raw.upper() if raw.isalpha() else raw
+
+
+def _generic_document_label(raw: str) -> str:
+    normalized = _compact(raw).lower()
+    mapping = {
+        "agb": "AGB",
+        "allgemeine geschäftsbedingungen": "AGB",
+        "allgemeine geschaeftsbedingungen": "AGB",
+        "scc": "Standard Contractual Clauses",
+        "sccs": "Standard Contractual Clauses",
+        "dpa": "Data Processing Agreement",
+    }
+    if normalized in mapping:
+        return mapping[normalized]
+    return " ".join(part.capitalize() for part in normalized.split())
 
 
 def _match_reference(label: str, source_file: str, documents: list[dict[str, str]]) -> str | None:
@@ -484,11 +517,6 @@ def _finding_from_missing_item(item: MissingCompletenessItem) -> Finding:
         ],
         requires_escalation=False,
     )
-
-
-def _is_vague_question(question: str) -> bool:
-    compact = _compact(question).lower()
-    return compact in {"is this ok?", "is this okay?", "can we sign?", "please review", "review this", "is this acceptable?"}
 
 
 def _compact(text: str) -> str:

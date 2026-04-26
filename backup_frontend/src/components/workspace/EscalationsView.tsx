@@ -388,7 +388,7 @@ const AnnotationPanel = ({ detail }: { detail: EscalationDetail }) => {
   const markers = buildAnnotationMarkerMap(detail.trigger_annotations);
 
   return (
-    <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
+    <section className="rounded-lg border border-border/60 surface-card p-5 shadow-card">
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="h-4 w-4 text-primary" />
         <h2 className="text-sm font-semibold">AI flags</h2>
@@ -475,14 +475,14 @@ const ContextPanel = ({
   return (
     <aside className="overflow-y-auto bg-card/20 p-5 space-y-4">
       {!detail ? (
-        <div className="rounded-lg border border-border/60 gradient-card p-5 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border/60 surface-card p-5 text-sm text-muted-foreground">
           Select a pending ticket.
         </div>
       ) : (
         <>
           <AnnotationPanel detail={detail} />
 
-          <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
+          <section className="rounded-lg border border-border/60 surface-card p-5 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <FileText className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Suggested fixes</h2>
@@ -503,7 +503,7 @@ const ContextPanel = ({
             </div>
           </section>
 
-          <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
+          <section className="rounded-lg border border-border/60 surface-card p-5 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <MessageSquare className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Ask about this contract</h2>
@@ -540,7 +540,7 @@ const ContextPanel = ({
                 type="submit"
                 size="sm"
                 disabled={chatLoading || !chatQuestion.trim()}
-                className="w-full gradient-primary border-0 text-primary-foreground"
+                className="w-full surface-primary border-0 text-primary-foreground"
               >
                 {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 mr-1.5" />}
                 Ask
@@ -548,7 +548,7 @@ const ContextPanel = ({
             </form>
           </section>
 
-          <section className="rounded-lg border border-border/60 gradient-card p-5 shadow-card">
+          <section className="rounded-lg border border-border/60 surface-card p-5 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <ShieldAlert className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Legal decision</h2>

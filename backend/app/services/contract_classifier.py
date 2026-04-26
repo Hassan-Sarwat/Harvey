@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
+from app.services.model_context import is_model_access_error, openai_model_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +96,24 @@ async def _llm_contract_classification(contract_text: str) -> ContractClassifica
 
     try:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
-        content = await _create_classification_response(
-            client=client,
-            model=settings.openai_model,
-            reasoning_effort=settings.openai_reasoning_effort,
-            contract_text=contract_text,
-        )
+        content = ""
+        last_error: Exception | None = None
+        for model in openai_model_candidates(settings):
+            try:
+                content = await _create_classification_response(
+                    client=client,
+                    model=model,
+                    reasoning_effort=settings.openai_reasoning_effort,
+                    contract_text=contract_text,
+                )
+                break
+            except Exception as exc:
+                last_error = exc
+                if not is_model_access_error(exc):
+                    raise
+                logger.warning("OpenAI model %s unavailable for contract classification; trying fallback model", model)
+        if not content and last_error:
+            raise last_error
         parsed = _parse_classification_json(content)
         if parsed is None:
             return None

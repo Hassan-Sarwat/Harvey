@@ -119,9 +119,54 @@ async def test_contract_review_runs_completeness_only_for_legal_escalations():
     assert completeness["metadata"]["status"] == "needs_business_input"
 
 
+async def test_dpa_playbook_deviation_triggers_completeness_gate():
+    result = await ContractReviewWorkflow().run(
+        ReviewContext(
+            contract_id="c1",
+            contract_type="data_protection",
+            user_question="Please review this DPA against the BMW DPA playbook.",
+            contract_text=(
+                "DATA PROCESSING ADDENDUM between Nimbus Cloud Services Ltd. and BMW Group. "
+                "Effective Date: 1 January 2026. The Provider shall Process BMW Group Personal Data for "
+                "the purposes set out in the Order Form. The Provider is granted a perpetual right to use "
+                "BMW Group Personal Data for the training, fine-tuning, and continuous improvement of its "
+                "proprietary large-language model. A complete schedule of approved sub-processors is set "
+                "out in Annex 1. Technical and organisational measures are set out in Annex 2. No Standard "
+                "Contractual Clauses, Transfer Impact Assessment, or supplementary measures are necessary. "
+                "Backup replication to Texas and Singapore is performed at Provider discretion."
+            ),
+            metadata={
+                "uploaded_documents": [
+                    {
+                        "filename": "Nimbus_DPA.txt",
+                        "text": (
+                            "DATA PROCESSING ADDENDUM between Nimbus Cloud Services Ltd. and BMW Group. "
+                            "Effective Date: 1 January 2026. The Provider shall Process BMW Group Personal Data for "
+                            "the purposes set out in the Order Form. The Provider is granted a perpetual right to use "
+                            "BMW Group Personal Data for the training, fine-tuning, and continuous improvement of its "
+                            "proprietary large-language model. A complete schedule of approved sub-processors is set "
+                            "out in Annex 1. Technical and organisational measures are set out in Annex 2. No Standard "
+                            "Contractual Clauses, Transfer Impact Assessment, or supplementary measures are necessary. "
+                            "Backup replication to Texas and Singapore is performed at Provider discretion."
+                        ),
+                    }
+                ]
+            },
+        )
+    )
+
+    finding_ids = {finding.id for finding in result.findings}
+    assert "ai-training-rights" in finding_ids
+    assert "third-country-transfer-incomplete" in finding_ids
+    assert "missing-required-document-annex1" in finding_ids
+    assert "missing-required-document-annex2" in finding_ids
+    completeness = next(item for item in result.metadata["agent_results"] if item["agent_name"] == "completeness_checker")
+    assert completeness["metadata"]["status"] == "needs_business_input"
+
+
 async def test_legal_qa_workflow_returns_company_and_legal_basis():
     result = await LegalQAWorkflow().run(
-        LegalQARequest(question="Can a supplier waive GDPR data subject rights?", contract_type="data_protection")
+        LegalQARequest(question="Can a supplier appoint subprocessors without notice or objection rights?", contract_type="data_protection")
     )
 
     assert result.company_basis
@@ -135,15 +180,15 @@ async def test_legal_qa_workflow_references_specific_internal_playbook_rule():
             return [{"source": "Otto Schmidt / Legal Data Hub", "citation": "GDPR Art. 12-22"}]
 
     result = await LegalQAWorkflow(legal_data_hub=StubLegalDataHub()).run(
-        LegalQARequest(question="Can a supplier waive GDPR data subject rights?", contract_type="data_protection")
+        LegalQARequest(question="Can a supplier appoint subprocessors without notice or objection rights?", contract_type="data_protection")
     )
 
     assert result.company_basis[0] == {
         "source": "BMW Group DPA negotiation playbook: dpa_negotiation_playbook.md",
-        "citation": "DPA-003 - Data subject rights assistance",
-        "quote": "Processor must promptly notify BMW Group of requests and assist BMW Group without responding directly unless instructed or legally required.",
+        "citation": "DPA-002 - Sub-processor governance",
+        "quote": "Prior written notification of each new sub-processor with a 30-day objection window on reasonable grounds.",
         "severity": "high",
-        "approved_fix": "Processor shall promptly notify BMW Group and provide reasonable assistance with data subject requests without separate charge unless BMW Group approves an exceptional fee.",
+        "approved_fix": "Prior written notification of each new sub-processor with a 30-day objection window on reasonable grounds.",
     }
 
 
@@ -172,13 +217,13 @@ async def test_legal_qa_workflow_summarizes_complete_dpa_playbook(question):
         monkeypatch.undo()
 
     assert result.answer_kind == "playbook_summary"
-    assert result.playbook_row_count == 8
+    assert result.playbook_row_count == 7
     assert result.escalate is False
-    assert len(result.company_basis) == 8
+    assert len(result.company_basis) == 7
     assert result.ai_generated is True
     assert result.summary == "OpenAI generated DPA playbook summary"
     assert openai_calls[0]["question"] == question
-    assert len(openai_calls[0]["all_rows"]) == 8
+    assert len(openai_calls[0]["all_rows"]) == 7
 
 
 async def test_legal_qa_openai_unavailable_does_not_use_fixed_playbook_summary():
@@ -187,9 +232,9 @@ async def test_legal_qa_openai_unavailable_does_not_use_fixed_playbook_summary()
     )
 
     assert result.answer_kind == "playbook_summary"
-    assert result.playbook_row_count == 8
+    assert result.playbook_row_count == 7
     assert result.escalate is False
-    assert len(result.company_basis) == 8
+    assert len(result.company_basis) == 7
     assert result.ai_generated is False
     assert "OpenAI answer generator is unavailable" in result.summary
     assert "DPA is the privacy contract" not in result.summary

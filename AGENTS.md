@@ -20,6 +20,10 @@ The active frontend is the Vite React app in `frontend/src`.
 - `frontend/src/types.ts`: frontend DTO types for run results, history, sources, findings, dashboard data.
 - `frontend/src/styles.css`: active app styling.
 
+Frontend visual rule:
+
+- Do not use colour gradients in the active UI. Avoid CSS gradient functions such as `linear-gradient`, `radial-gradient`, and `conic-gradient`; use flat fills, borders, and shadows instead.
+
 Navigation currently uses:
 
 - General
