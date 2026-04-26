@@ -102,6 +102,80 @@ const mockLegalSources = [
   }
 ];
 
+type RunningAgentStep = {
+  id: string;
+  label: string;
+  agent: string;
+  summary: string;
+  status: "running" | "queued";
+};
+
+function runningAgentSteps(mode: AskMode): RunningAgentStep[] {
+  if (mode === "contract_review") {
+    return [
+      {
+        id: "contract_understanding",
+        label: "Contract Understanding",
+        agent: "Classifier",
+        summary: "Classifying the upload and routing it to the DPA review path.",
+        status: "running",
+      },
+      {
+        id: "completeness_checker",
+        label: "Completeness Checker",
+        agent: "Pre-Legal Gate",
+        summary: "Building Soll/Ist lists from the checklist, contract, and uploaded files.",
+        status: "queued",
+      },
+      {
+        id: "playbook_checker",
+        label: "DPA Playbook Checker",
+        agent: "Playbook Review",
+        summary: "Loading the relevant playbook and comparing it against the contract.",
+        status: "queued",
+      },
+      {
+        id: "legal_checker",
+        label: "German Legal Checker",
+        agent: "Legal Evidence",
+        summary: "Checking German/EU evidence and Otto Schmidt sources where needed.",
+        status: "queued",
+      },
+      {
+        id: "risk_aggregator",
+        label: "Risk Aggregator",
+        agent: "Decision Layer",
+        summary: "Combining findings into approved, needs business input, or pending Legal.",
+        status: "queued",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "document_summarizer",
+      label: "Document Summarizer",
+      agent: "Matter Reader",
+      summary: "Reading uploaded context and extracting the useful parts.",
+      status: "running",
+    },
+    {
+      id: "playbook_document_reader",
+      label: "Playbook Document Reader",
+      agent: "Company Playbook",
+      summary: "Loading the active BMW playbook context.",
+      status: "queued",
+    },
+    {
+      id: "legal_qa",
+      label: "Legal and Playbook Q&A",
+      agent: "Answer Synthesizer",
+      summary: "Preparing the answer with playbook and legal evidence.",
+      status: "queued",
+    },
+  ];
+}
+
 function applyAutoRoutingFallback(result: RunResult, wasAutoMode: boolean): RunResult {
   if (!wasAutoMode || result.agent_routing_mode) return result;
   const routedAgents = result.routed_agents?.length ? result.routed_agents : result.selected_agents;
@@ -388,9 +462,12 @@ function AskDonnaView(props: {
             {props.isRunning ? (
               <div className="chat-message assistant">
                 <div className="message-avatar">D</div>
-                <div className="message-bubble typing">
-                  <Loader2 className="spin" size={18} />
-                  Donna is checking sources and routing agents.
+                <div className="message-bubble typing agent-running-bubble">
+                  <div className="typing-head">
+                    <Loader2 className="spin" size={18} />
+                    <span>Donna is orchestrating the review agents.</span>
+                  </div>
+                  <AgentOrchestrationPanel mode={props.mode} />
                 </div>
               </div>
             ) : null}
@@ -469,6 +546,36 @@ function ChatResultSummary({ result }: { result: RunResult }) {
         <small>Missing package input required before Legal</small>
       ) : null}
       {result.source_usage?.length ? <small>{result.source_usage.length} source group(s) recorded</small> : null}
+    </div>
+  );
+}
+
+function AgentOrchestrationPanel({ mode }: { mode: AskMode }) {
+  const steps = runningAgentSteps(mode);
+  return (
+    <div className="agent-orchestration-card">
+      <div className="agent-orchestration-head">
+        <BrainCircuit size={17} />
+        <div>
+          <strong>Agent orchestration</strong>
+          <span>{mode === "contract_review" ? "Contract review route" : "General question route"}</span>
+        </div>
+      </div>
+      <div className="agent-run-list">
+        {steps.map((step) => (
+          <div className={`agent-run-step ${step.status}`} key={step.id}>
+            <div className="agent-run-icon">
+              {step.status === "running" ? <Loader2 className="spin" size={15} /> : <ChevronRight size={15} />}
+            </div>
+            <div>
+              <span>{step.agent}</span>
+              <strong>{step.label}</strong>
+              <p>{step.summary}</p>
+            </div>
+            <small>{step.status}</small>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
