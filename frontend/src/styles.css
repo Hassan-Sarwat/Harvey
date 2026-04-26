@@ -54,14 +54,13 @@ button {
 .brand-mark {
   width: 56px;
   height: 56px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: 0 0 56px;
   border-radius: 50%;
-  font-weight: 900;
-  color: #ffffff;
   border: 2px solid rgba(255, 255, 255, 0.78);
   background: #1d74bd;
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
+  object-fit: cover;
 }
 
 .brand strong,

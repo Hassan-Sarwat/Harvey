@@ -275,7 +275,7 @@ function Sidebar({ activeView, onChange, escalationCount }: { activeView: string
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">B</div>
+        <img className="brand-mark" src={donnaLogo} alt="Donna" />
         <div>
           <strong>BMW LEGAL</strong>
           <span>Agent Platform</span>
