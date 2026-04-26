@@ -30,6 +30,7 @@ import {
 import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { analyzeMatter, askEscalationQuestion, decideEscalation, dropHistoryItem, getDashboard, getEscalation, getHistory, getHistoryItem, listEscalations } from "./api";
+import donnaLogo from "./assets/donna-logo.png";
 import type { AgentMetric, AskMode, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
 
 const mockMatterSummary = {
@@ -452,7 +453,7 @@ function AskDonnaView(props: {
             ) : null}
             {props.chatMessages.map((item, index) => (
               <div className={`chat-message ${item.role}`} key={`${item.role}-${index}`}>
-                <div className="message-avatar">{item.role === "user" ? "You" : "D"}</div>
+                {item.role === "user" ? <div className="message-avatar">You</div> : <DonnaAvatar />}
                 <div className="message-bubble">
                   {item.role === "assistant" ? <MarkdownMessage content={item.content} /> : <p>{item.content}</p>}
                   {item.result ? <ChatResultSummary result={item.result} /> : null}
@@ -461,7 +462,7 @@ function AskDonnaView(props: {
             ))}
             {props.isRunning ? (
               <div className="chat-message assistant">
-                <div className="message-avatar">D</div>
+                <DonnaAvatar />
                 <div className="message-bubble typing agent-running-bubble">
                   <div className="typing-head">
                     <Loader2 className="spin" size={18} />
@@ -524,6 +525,14 @@ function AskDonnaView(props: {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function DonnaAvatar() {
+  return (
+    <div className="message-avatar donna-avatar" aria-label="Donna" role="img">
+      <img src={donnaLogo} alt="" />
     </div>
   );
 }

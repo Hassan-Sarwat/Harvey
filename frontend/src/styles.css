@@ -401,6 +401,20 @@ button {
   font-weight: 900;
 }
 
+.donna-avatar {
+  overflow: hidden;
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid #dce3ed;
+  box-shadow: 0 3px 9px rgba(6, 26, 53, 0.12);
+}
+
+.donna-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .chat-message.user .message-avatar {
   background: #003a7c;
 }
