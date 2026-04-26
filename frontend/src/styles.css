@@ -795,6 +795,13 @@ button {
   background: #174f92;
 }
 
+.legal-flow-next:disabled {
+  color: #7b8798;
+  border-color: #d7e0ec;
+  background: #edf1f6;
+  cursor: not-allowed;
+}
+
 .legal-flow-actions {
   display: flex;
   flex-wrap: wrap;

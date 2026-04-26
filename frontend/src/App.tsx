@@ -797,11 +797,21 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
           <button className="legal-flow-back" type="button" onClick={() => setStep("review")}>
             Back
           </button>
-          <button className="legal-flow-next" type="button" onClick={() => setStep("ticket")}>
+          <button
+            className="legal-flow-next"
+            type="button"
+            onClick={() => setStep("ticket")}
+            disabled={!addedFiles.length}
+            title={!addedFiles.length ? "Add at least one missing file before continuing." : undefined}
+          >
             Next: ticket details
             <ChevronRight size={16} />
           </button>
-          <span>Upload the missing file{missing.length === 1 ? "" : "s"} and rerun before sending to Legal.</span>
+          <span>
+            {addedFiles.length
+              ? "File added. Continue to complete the Legal ticket details."
+              : `Upload the missing file${missing.length === 1 ? "" : "s"} before continuing.`}
+          </span>
         </div>
 
         {uploadArea("Add missing files", "Drop here or browse. Files are attached to the composer for the rerun.", 4)}
