@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.services.legal_data_hub import LegalDataHubClient
+from app.services.openai_compat import chat_completion_options
 from app.services.playbook_repository import load_playbook_rows, playbook_file_label, playbook_source_label
 
 logger = logging.getLogger(__name__)
@@ -178,8 +179,10 @@ async def _openai_answer(
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
-            max_tokens=1800 if answer_kind == "playbook_summary" else 1000,
-            temperature=0.1,
+            **chat_completion_options(
+                settings.openai_model,
+                max_tokens=1800 if answer_kind == "playbook_summary" else 1000,
+            ),
         )
         return response.choices[0].message.content or ""
     except Exception as exc:
@@ -668,4 +671,3 @@ _JARGON_GLOSSARY: dict[str, str] = {
     "purpose limitation": "purpose limitation (GDPR principle — data can only be used for the specific purpose it was collected for)",
     "storage limitation": "storage limitation (GDPR principle — personal data must not be kept longer than necessary)",
 }
-

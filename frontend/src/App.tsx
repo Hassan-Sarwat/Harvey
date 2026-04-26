@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  ClipboardCheck,
   Database,
   ExternalLink,
   FileSearch,
@@ -20,7 +19,6 @@ import {
   Loader2,
   Menu,
   MessageSquareText,
-  Play,
   Send,
   Search,
   Settings,
@@ -30,72 +28,9 @@ import {
   Users
 } from "lucide-react";
 import React, { useEffect, useMemo, useState, type ReactNode } from "react";
-import { analyzeMatter, askEscalationQuestion, decideEscalation, dropHistoryItem, getConfig, getDashboard, getEscalation, getHistory, getHistoryItem, listEscalations, runDemo } from "./api";
-import type { AgentMetric, AgentStep, AppConfig, AskMode, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
-
-const emptyConfig: AppConfig = {
-  app_name: "BMW Legal Agent Platform",
-  workflow_name: "Ask Donna",
-  demo_question: "Can I proceed with this IT vendor DPA, or do I need to escalate it to Legal?",
-  demo_context: "",
-  sources: [],
-  agents: [],
-  default_sources: [],
-  default_agents: []
-};
-
-const optimisticSteps: AgentStep[] = [
-  {
-    id: "intake",
-    label: "Intake classification",
-    agent: "Legal Intake Manager",
-    status: "running",
-    summary: "Classifying the request and selecting specialist checks.",
-    detail: "The manager keeps ownership of the final answer.",
-    started_at: new Date().toISOString(),
-    completed_at: new Date().toISOString()
-  },
-  {
-    id: "parsing",
-    label: "File parsing",
-    agent: "Document Extraction Tool",
-    status: "queued",
-    summary: "Extracting contract, DPA, annex, email, and spreadsheet text.",
-    detail: "Supports PDF, DOCX, XLSX, PPTX, TXT, CSV, EML, and ZIP bundles.",
-    started_at: new Date().toISOString(),
-    completed_at: new Date().toISOString()
-  },
-  {
-    id: "completeness",
-    label: "Completeness check",
-    agent: "Completeness Agent",
-    status: "queued",
-    summary: "Looking for missing TOMs, annexes, SCCs, side letters, and amendments.",
-    detail: "",
-    started_at: new Date().toISOString(),
-    completed_at: new Date().toISOString()
-  },
-  {
-    id: "playbook",
-    label: "DPA playbook review",
-    agent: "DPA Playbook Agent",
-    status: "queued",
-    summary: "Comparing clauses against BMW-style green/yellow/red positions.",
-    detail: "",
-    started_at: new Date().toISOString(),
-    completed_at: new Date().toISOString()
-  },
-  {
-    id: "judge",
-    label: "Escalation judgment",
-    agent: "Escalation Judge Agent",
-    status: "queued",
-    summary: "Deciding whether Legal should be involved before signature.",
-    detail: "",
-    started_at: new Date().toISOString(),
-    completed_at: new Date().toISOString()
-  }
-];
+import ReactMarkdown from "react-markdown";
+import { analyzeMatter, askEscalationQuestion, decideEscalation, dropHistoryItem, getDashboard, getEscalation, getHistory, getHistoryItem, listEscalations } from "./api";
+import type { AgentMetric, AskMode, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
 
 const mockMatterSummary = {
   agreement_type: "IT vendor SaaS agreement / DPA",
@@ -179,7 +114,6 @@ function applyAutoRoutingFallback(result: RunResult, wasAutoMode: boolean): RunR
 }
 
 function App() {
-  const [config, setConfig] = useState<AppConfig>(emptyConfig);
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
   const [activeView, setActiveView] = useState<"ask" | "history" | "dashboard" | "playbook" | "escalations">("ask");
   const [escalationCount, setEscalationCount] = useState(0);
@@ -188,7 +122,6 @@ function App() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isFinalVersion, setIsFinalVersion] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [result, setResult] = useState<RunResult | null>(null);
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string; result?: RunResult }>>([]);
   const [historyItems, setHistoryItems] = useState<HistorySummary[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
@@ -197,18 +130,11 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getConfig()
-      .then((loaded) => {
-        setConfig(loaded);
-      })
-      .catch((err) => setError(err.message));
     getDashboard().then(setDashboard).catch(() => undefined);
     loadHistory().catch(() => undefined);
     listEscalations("pending_legal").then((data) => setEscalationCount(data.items.length)).catch(() => undefined);
   }, []);
 
-  const steps = isRunning ? optimisticSteps : result?.agent_steps ?? [];
-  const agentLabelsById = useMemo(() => Object.fromEntries(config.agents.map((item) => [item.id, item.label])), [config.agents]);
   async function loadHistory() {
     const next = await getHistory();
     setHistoryItems(next.items);
@@ -242,8 +168,8 @@ function App() {
     }
   }
 
-  async function handleAnalyze(demoMode = false) {
-    const submitted = demoMode ? config.demo_question : message.trim();
+  async function handleAnalyze() {
+    const submitted = message.trim();
     if (!submitted && !files.length) {
       setError("Ask Donna needs a question, contract text, or uploaded file.");
       return;
@@ -252,16 +178,11 @@ function App() {
       submitted || (askMode === "general_question" ? "Summarize uploaded document(s)." : "Review uploaded contract bundle.");
     setIsRunning(true);
     setError(null);
-    if (!demoMode) {
-      setChatMessages((items) => [...items, { role: "user", content: displayedMessage }]);
-      setMessage("");
-    }
+    setChatMessages((items) => [...items, { role: "user", content: displayedMessage }]);
+    setMessage("");
     try {
-      const next = demoMode
-        ? await runDemo()
-        : await analyzeMatter({ message: submitted, mode: askMode, threadId, isFinalVersion, files, demoMode: false });
+      const next = await analyzeMatter({ message: submitted, mode: askMode, threadId, isFinalVersion, files, demoMode: false });
       const normalized = applyAutoRoutingFallback(next, true);
-      setResult(normalized);
       setThreadId(normalized.history_thread_id ?? threadId);
       setChatMessages((items) => [...items, { role: "assistant", content: normalized.plain_answer, result: normalized }]);
       setFiles([]);
@@ -299,24 +220,19 @@ function App() {
           />
         ) : (
           <AskDonnaView
-            config={config}
             mode={askMode}
             message={message}
             threadId={threadId}
             isFinalVersion={isFinalVersion}
             chatMessages={chatMessages}
-            agentLabelsById={agentLabelsById}
             files={files}
-            result={result}
-            steps={steps}
             isRunning={isRunning}
             error={error}
             setMode={setAskMode}
             setMessage={setMessage}
             setIsFinalVersion={setIsFinalVersion}
             setFiles={setFiles}
-            onAnalyze={() => handleAnalyze(false)}
-            onDemo={() => handleAnalyze(true)}
+            onAnalyze={handleAnalyze}
           />
         )}
       </main>
@@ -409,7 +325,6 @@ function Topbar() {
         <kbd>⌘K</kbd>
       </div>
       <div className="topbar-actions">
-        <span className="status-pill secure"><ShieldCheck size={16} />Demo-safe cache enabled</span>
         <button className="icon-button" aria-label="Notifications">
           <Bell size={20} />
         </button>
@@ -421,16 +336,12 @@ function Topbar() {
 }
 
 function AskDonnaView(props: {
-  config: AppConfig;
   mode: AskMode;
   message: string;
   threadId: string | null;
   isFinalVersion: boolean;
   chatMessages: Array<{ role: "user" | "assistant"; content: string; result?: RunResult }>;
-  agentLabelsById: Record<string, string>;
   files: File[];
-  result: RunResult | null;
-  steps: AgentStep[];
   isRunning: boolean;
   error: string | null;
   setMode: (value: AskMode) => void;
@@ -438,7 +349,6 @@ function AskDonnaView(props: {
   setIsFinalVersion: (value: boolean) => void;
   setFiles: (files: File[]) => void;
   onAnalyze: () => void;
-  onDemo: () => void;
 }) {
   const placeholder =
     props.mode === "contract_review"
@@ -453,10 +363,6 @@ function AskDonnaView(props: {
             <p className="eyebrow">Ask Donna</p>
             <h1>Ask questions, review contracts, and keep the full decision trail.</h1>
           </div>
-          <button className="secondary-button" onClick={props.onDemo} disabled={props.isRunning}>
-            <Play size={17} />
-            Run demo matter
-          </button>
         </div>
 
         <div className="chat-card">
@@ -474,8 +380,8 @@ function AskDonnaView(props: {
               <div className={`chat-message ${item.role}`} key={`${item.role}-${index}`}>
                 <div className="message-avatar">{item.role === "user" ? "You" : "D"}</div>
                 <div className="message-bubble">
-                  <p>{item.content}</p>
-                  {item.result ? <ChatResultSummary result={item.result} agentLabelsById={props.agentLabelsById} /> : null}
+                  {item.role === "assistant" ? <MarkdownMessage content={item.content} /> : <p>{item.content}</p>}
+                  {item.result ? <ChatResultSummary result={item.result} /> : null}
                 </div>
               </div>
             ))}
@@ -517,7 +423,7 @@ function AskDonnaView(props: {
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") props.onAnalyze();
               }}
-              rows={6}
+              rows={5}
               placeholder={placeholder}
             />
             <UploadBox files={props.files} setFiles={props.setFiles} />
@@ -540,22 +446,25 @@ function AskDonnaView(props: {
             {props.error ? <div className="error-box">{props.error}</div> : null}
           </div>
         </div>
-
-        <AgentTimeline steps={props.steps} isRunning={props.isRunning} />
-        {props.result ? <ResultPanel result={props.result} agentLabelsById={props.agentLabelsById} /> : <EmptyState />}
       </section>
     </div>
   );
 }
 
-function ChatResultSummary({ result, agentLabelsById }: { result: RunResult; agentLabelsById: Record<string, string> }) {
-  const routed = (result.routed_agents ?? []).map((agentId) => agentLabelsById[agentId] ?? agentId.replace("_", " "));
+function MarkdownMessage({ content }: { content: string }) {
+  return (
+    <div className="message-markdown">
+      <ReactMarkdown skipHtml>{content}</ReactMarkdown>
+    </div>
+  );
+}
+
+function ChatResultSummary({ result }: { result: RunResult }) {
   return (
     <div className="chat-result-summary">
       <span className={result.contract_status === "approved" ? "status-pill approved" : result.contract_status === "pending_legal" ? "status-pill warning" : "status-pill"}>
         {result.contract_status ? result.contract_status.replace("_", " ") : result.escalation_state}
       </span>
-      {routed.length ? <small>Routed to {routed.join(", ")}</small> : null}
       {result.source_usage?.length ? <small>{result.source_usage.length} source group(s) recorded</small> : null}
     </div>
   );
@@ -657,98 +566,6 @@ function UploadBox({ files, setFiles }: { files: File[]; setFiles: (files: File[
         </div>
       ) : null}
     </div>
-  );
-}
-
-function AgentTimeline({ steps, isRunning }: { steps: AgentStep[]; isRunning: boolean }) {
-  if (!steps.length) return null;
-  return (
-    <section className="timeline-card">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Agent orchestration</p>
-          <h2>Visible workflow</h2>
-        </div>
-        {isRunning ? <span className="status-pill blue">Running</span> : <span className="status-pill">Trace saved</span>}
-      </div>
-      <div className="timeline">
-        {steps.map((step, index) => (
-          <div key={step.id} className="timeline-step">
-            <div className={step.status === "running" ? "step-dot running" : "step-dot"}>
-              {step.status === "running" ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-            </div>
-            <div>
-              <span className="step-index">{String(index + 1).padStart(2, "0")} / {step.agent}</span>
-              <strong>{step.label}</strong>
-              <p>{step.summary}</p>
-              {step.detail ? <small>{step.detail}</small> : null}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ResultPanel({ result, agentLabelsById }: { result: RunResult; agentLabelsById: Record<string, string> }) {
-  const routingMode = result.agent_routing_mode ?? "manual";
-  const routedLabels = (result.routed_agents ?? []).map((agentId) => agentLabelsById[agentId] ?? agentId);
-  const suggestionLabel = result.mode === "general_question" ? "Recommended next step" : "Suggested fallback language";
-  return (
-    <section className="result-card">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Recommendation</p>
-          <h2>{result.escalation_state}</h2>
-        </div>
-        <div className="result-badges">
-          <span className={routingMode === "auto" ? "status-pill blue" : "status-pill"}>
-            <Sparkles size={14} />
-            {routingMode === "auto" ? "Auto-routed" : "Manual route"}
-          </span>
-          <Confidence value={result.confidence} />
-        </div>
-      </div>
-      {routedLabels.length ? (
-        <div className="routing-banner">
-          <BrainCircuit size={18} />
-          <div>
-            <span>{routingMode === "auto" ? "Auto selected" : "Selected agents"}</span>
-            <strong>{routedLabels.join(", ")}</strong>
-          </div>
-        </div>
-      ) : null}
-      <p className="answer">{result.plain_answer}</p>
-      <div className="answer-grid">
-        <div>
-          <h3>Why it matters</h3>
-          <p>{result.legal_answer}</p>
-        </div>
-        <div>
-          <h3>Next action</h3>
-          <p>{result.next_action}</p>
-        </div>
-      </div>
-      <div className="suggested-language">
-        <div className="suggestion-title">
-          <ClipboardCheck size={18} />
-          <span>{suggestionLabel}</span>
-        </div>
-        <pre>{result.suggested_language}</pre>
-      </div>
-    </section>
-  );
-}
-
-function EmptyState() {
-  return (
-    <section className="empty-state">
-      <Sparkles size={27} />
-      <div>
-        <strong>Best-guess intake preview</strong>
-        <p>Likely route: DPA/privacy review recommended before approval. Run the agents to replace these assumptions with a traceable decision.</p>
-      </div>
-    </section>
   );
 }
 
@@ -1180,10 +997,6 @@ function PlaybookView() {
       </section>
     </div>
   );
-}
-
-function Confidence({ value }: { value: number }) {
-  return <span className="confidence">{Math.round(value * 100)}% confidence</span>;
 }
 
 // ─────────────────────────────────────────────

@@ -27,19 +27,30 @@ class LegalDataHubClient:
             results: list[dict[str, Any]] = []
             seen_ids: set[str] = set()
             async with httpx.AsyncClient(timeout=self.settings.legal_data_hub_timeout) as client:
-                for data_asset in self._data_assets():
-                    # Prefer semantic search; fall back to keyword search
-                    hits = await _semantic_search(client, self._base_url(), query, data_asset, headers)
-                    if not hits:
-                        hits = await _keyword_search(client, self._keyword_search_url(data_asset), query, headers)
-                    for hit in hits:
-                        normalized = _normalize_result(hit, data_asset)
-                        hit_id = normalized.get("_id") or normalized.get("citation", "")
-                        if hit_id and hit_id in seen_ids:
-                            continue
-                        if hit_id:
-                            seen_ids.add(hit_id)
-                        results.append(normalized)
+                qna_payload = await _qna(client, self._qna_url(), query, headers)
+                for document in _extract_qna_documents(qna_payload):
+                    normalized = _normalize_qna_document(document, qna_payload or {})
+                    hit_id = normalized.get("_id") or normalized.get("citation", "")
+                    if hit_id and hit_id in seen_ids:
+                        continue
+                    if hit_id:
+                        seen_ids.add(hit_id)
+                    results.append(normalized)
+
+                if not results:
+                    for data_asset in self._data_assets():
+                        # Prefer semantic search; fall back to keyword search
+                        hits = await _semantic_search(client, self._base_url(), query, data_asset, headers)
+                        if not hits:
+                            hits = await _keyword_search(client, self._keyword_search_url(data_asset), query, headers)
+                        for hit in hits:
+                            normalized = _normalize_result(hit, data_asset)
+                            hit_id = normalized.get("_id") or normalized.get("citation", "")
+                            if hit_id and hit_id in seen_ids:
+                                continue
+                            if hit_id:
+                                seen_ids.add(hit_id)
+                            results.append(normalized)
             if results:
                 return results
         except (httpx.HTTPError, ValueError) as exc:
@@ -54,6 +65,7 @@ class LegalDataHubClient:
         payload: dict[str, Any] = {
             "configured": configured,
             "base_url": self.settings.legal_data_hub_base_url,
+            "qna_path": self.settings.legal_data_hub_qna_path,
             "search_path": self.settings.legal_data_hub_search_path,
             "auth_mode": self.settings.legal_data_hub_auth_mode,
             "data_assets": self._data_assets(),
@@ -91,6 +103,12 @@ class LegalDataHubClient:
         if not search_base.startswith("/"):
             search_base = f"/{search_base}"
         return f"{self._base_url()}{search_base}/{encoded_asset}/_search"
+
+    def _qna_url(self) -> str:
+        qna_path = self.settings.legal_data_hub_qna_path.strip() or "/api/qna"
+        if not qna_path.startswith("/"):
+            qna_path = f"/{qna_path}"
+        return f"{self._base_url()}{qna_path}"
 
     def _data_assets(self) -> list[str]:
         return [
@@ -185,6 +203,28 @@ async def _semantic_search(
         return []
 
 
+async def _qna(
+    client: httpx.AsyncClient,
+    url: str,
+    query: str,
+    headers: dict[str, str],
+) -> dict[str, Any] | None:
+    """POST /api/qna — Otto Schmidt attribution answer with source documents."""
+    body = {
+        "prompt": query,
+        "data_asset": "*",
+        "mode": "attribution",
+        "filter": [{}],
+    }
+    try:
+        response = await client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else None
+    except httpx.HTTPStatusError:
+        return None
+
+
 async def _keyword_search(
     client: httpx.AsyncClient,
     url: str,
@@ -225,6 +265,51 @@ def _extract_hits(payload: Any) -> list[dict[str, Any]]:
     if isinstance(results, list):
         return results
     return []
+
+
+def _extract_qna_documents(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not payload:
+        return []
+    documents = payload.get("sourcedocuments") or payload.get("source_documents") or []
+    return documents if isinstance(documents, list) else []
+
+
+def _normalize_qna_document(document: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    metadata = document.get("metadata") if isinstance(document.get("metadata"), dict) else {}
+    content = str(document.get("content") or document.get("text") or "")[:800]
+    source = str(metadata.get("source") or metadata.get("title") or metadata.get("name") or "Otto Schmidt QnA source")
+    url = metadata.get("oso_url") or metadata.get("url") or metadata.get("link")
+    document_type = metadata.get("dokumententyp") or metadata.get("document_type")
+    date = metadata.get("datum") or metadata.get("date")
+    aktenzeichen = metadata.get("aktenzeichen")
+    citation_parts = [source]
+    if document_type:
+        citation_parts.append(str(document_type))
+    if date:
+        citation_parts.append(str(date)[:10])
+    citation = " - ".join(part for part in citation_parts if part)
+
+    normalized: dict[str, Any] = {
+        "_id": metadata.get("id") or metadata.get("document_id") or url or source,
+        "source": "Otto Schmidt / Legal Data Hub QnA",
+        "citation": citation,
+        "quote": content or "Live Legal Data Hub QnA source returned without excerpt text.",
+        "retrieval_mode": "live",
+        "retrieval_endpoint": "qna",
+        "data_asset": "*",
+        "qna_response_id": payload.get("response_id"),
+        "qna_answer": payload.get("text") or "",
+    }
+    if url:
+        normalized["url"] = url
+    if document_type:
+        normalized["source_type"] = document_type
+    if date:
+        normalized["date"] = date
+    if aktenzeichen:
+        normalized["aktenzeichen"] = aktenzeichen
+    normalized.update({f"metadata_{key}": value for key, value in metadata.items() if f"metadata_{key}" not in normalized})
+    return normalized
 
 
 def _normalize_result(hit: dict[str, Any], data_asset: str) -> dict[str, Any]:

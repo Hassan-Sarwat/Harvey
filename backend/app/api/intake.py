@@ -354,11 +354,7 @@ async def _run_general_question(
     )
     resolved_domain = general_qa.domain
     legal_sources = [_legal_source_payload(item) for item in general_qa.legal_basis]
-    selected_sources = (
-        []
-        if general_qa.answer_kind == "playbook_file_missing"
-        else general_qa.selected_source_ids or _auto_sources(resolved_domain, general_qa.legal_basis, uploaded_texts)
-    )
+    selected_sources = general_qa.selected_source_ids or _auto_sources(resolved_domain, general_qa.legal_basis, uploaded_texts)
     source_usage = _source_usage(selected_sources, general_qa.company_basis, legal_sources, uploaded_texts, resolved_domain)
     escalation_state = "Legal review required before signature" if general_qa.escalate else "No legal escalation recommended"
     routed_agents = general_qa.routed_agents
@@ -404,6 +400,7 @@ async def _run_general_question(
             "legal_qa_escalate": general_qa.escalate,
             "answer_kind": general_qa.answer_kind,
             "playbook_row_count": general_qa.playbook_row_count,
+            "legal_tool_called": general_qa.legal_tool_called,
             "ai_generated": general_qa.ai_generated,
             "document_count": general_qa.document_count,
             "demo_mode": demo_mode,
@@ -586,6 +583,11 @@ def _source_usage(
                 for item in legal_sources
             ]
         else:
+            scoped_company_basis = company_basis
+            if source_id in {"bmw_data_protection_playbook", "bmw_litigation_playbook"} and any(
+                item.get("source_id") for item in company_basis
+            ):
+                scoped_company_basis = [item for item in company_basis if item.get("source_id") == source_id]
             items = [
                 {
                     "title": item.get("citation"),
@@ -593,7 +595,7 @@ def _source_usage(
                     "excerpt": item.get("quote"),
                     "fallback": False,
                 }
-                for item in company_basis
+                for item in scoped_company_basis
             ]
         usage.append(
             {
@@ -664,21 +666,12 @@ def _general_plain_answer(legal_qa: Any) -> str:
 
 
 def _general_supporting_answer(general_qa: Any) -> str:
-    answer_kind = getattr(general_qa, "answer_kind", "general_answer")
     document_count = int(getattr(general_qa, "document_count", 0) or 0)
-    if answer_kind == "document_summary":
-        return f"Donna summarized {document_count} uploaded document(s). No Otto Schmidt or playbook lookup was needed for this request."
-    if answer_kind == "document_qa":
-        return f"Donna answered from {document_count} uploaded document(s). No Otto Schmidt or playbook lookup was needed for this request."
-    if answer_kind == "playbook_file_missing":
-        return "Donna searched the company playbook folder and did not find a close matching playbook file."
-
     parts: list[str] = []
     if document_count:
-        parts.append(f"Donna used {document_count} uploaded document(s) as the matter context.")
+        parts.append(f"Donna included {document_count} uploaded document(s) in the user context.")
     if getattr(general_qa, "company_basis", None):
-        citations = ", ".join(str(item.get("citation") or "BMW playbook") for item in general_qa.company_basis[:3])
-        parts.append(f"BMW playbook context checked: {citations}.")
+        parts.append(f"BMW playbook context checked: {getattr(general_qa, 'playbook_row_count', 0)} active rule(s).")
     if getattr(general_qa, "legal_basis", None):
         parts.append(_legal_basis_sentence(general_qa.legal_basis))
     if not parts:
@@ -687,37 +680,18 @@ def _general_supporting_answer(general_qa: Any) -> str:
 
 
 def _general_next_action(general_qa: Any) -> str:
-    answer_kind = getattr(general_qa, "answer_kind", "general_answer")
     if getattr(general_qa, "escalate", False):
         return "Escalate to Legal before relying on this position."
-    if answer_kind == "document_summary":
-        return "Use this as a working summary and ask a follow-up question for any clause, risk, or legal point."
-    if answer_kind == "document_qa":
-        return "Use this as document context; run contract review if you need formal clause risk assessment."
-    if answer_kind in {"hybrid_document_legal", "legal_lookup"}:
+    if getattr(general_qa, "legal_basis", None):
         return "Use the cited legal evidence as context and keep Legal available for interpretation or judgment calls."
-    if answer_kind in {"hybrid_document_playbook", "playbook_lookup", "playbook_summary"}:
-        return "Use the cited BMW playbook position and escalate any red-line or unusual fallback."
-    if answer_kind == "playbook_file_summary":
-        return "Use this as a working summary of the company playbook document and confirm with Legal for judgment calls."
-    if answer_kind == "playbook_file_missing":
-        return "Upload the requested playbook or add it to data/playbook, then ask Donna to summarize it again."
-    return "Keep Legal available for ambiguity or high-value deviations."
+    return "Use the cited BMW playbook position and escalate any red-line or unusual fallback."
 
 
 def _general_agreement_type(answer_kind: str) -> str:
-    if answer_kind in {"document_summary", "document_qa", "hybrid_document_legal", "hybrid_document_playbook"}:
-        return "Uploaded document question"
-    if answer_kind == "legal_lookup":
-        return "German/EU legal question"
-    if answer_kind in {"playbook_lookup", "playbook_summary", "playbook_file_summary", "playbook_file_missing"}:
-        return "BMW playbook question"
     return "General legal/playbook question"
 
 
 def _general_governing_law(answer_kind: str, resolved_domain: str) -> str:
-    if answer_kind in {"document_summary", "document_qa", "playbook_file_missing"}:
-        return "Not assessed"
     return "German law / EU GDPR" if resolved_domain == "data_protection" else "German law"
 
 
@@ -726,17 +700,12 @@ def _general_agent_steps(general_qa: Any, created_at: str) -> list[dict[str, str
     routed_agents = list(getattr(general_qa, "routed_agents", []) or [])
     for agent_id in routed_agents:
         label = AGENT_LABELS.get(agent_id, agent_id.replace("_", " ").title())
-        if agent_id == "document_summarizer":
-            summary = "Read uploaded document text and prepared document context."
-            detail = f"{getattr(general_qa, 'document_count', 0)} uploaded document(s)."
-        elif agent_id == "playbook_document_reader":
-            summary = "Searched company playbook files and prepared playbook document context."
-            detail = "data/playbook"
-        elif agent_id == "legal_qa":
+        if agent_id == "legal_qa":
             summary = "Checked BMW playbook and German/EU legal evidence as needed."
             detail = (
-                f"{len(getattr(general_qa, 'company_basis', []) or [])} playbook source(s), "
-                f"{len(getattr(general_qa, 'legal_basis', []) or [])} legal source(s)."
+                f"{getattr(general_qa, 'playbook_row_count', 0)} playbook rule(s), "
+                f"{len(getattr(general_qa, 'legal_basis', []) or [])} legal source(s), "
+                f"{getattr(general_qa, 'document_count', 0)} uploaded document(s)."
             )
         else:
             summary = "Completed Ask Donna routing step."

@@ -266,6 +266,27 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.ask-workspace .center-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 92px - 86px);
+}
+
+.ask-workspace .page-title {
+  margin-bottom: 10px;
+}
+
+.ask-workspace .chat-card {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ask-workspace .chat-transcript {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
 .center-pane,
 .right-pane,
 .dashboard-view,
@@ -330,12 +351,12 @@ button {
 .chat-card {
   display: flex;
   flex-direction: column;
-  min-height: 560px;
+  min-height: 448px;
 }
 
 .chat-transcript {
-  min-height: 260px;
-  max-height: 54vh;
+  min-height: 208px;
+  max-height: 43vh;
   overflow: auto;
   padding: 24px;
   display: flex;
@@ -361,7 +382,7 @@ button {
 }
 
 .welcome-message p,
-.message-bubble p,
+.message-bubble > p,
 .history-message p,
 .quiet-box p {
   margin: 6px 0 0;
@@ -393,8 +414,91 @@ button {
   border-radius: 2px;
 }
 
-.message-bubble p {
+.message-bubble > p {
   white-space: pre-wrap;
+}
+
+.message-markdown {
+  color: inherit;
+  line-height: 1.55;
+}
+
+.message-markdown > :first-child {
+  margin-top: 0;
+}
+
+.message-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.message-markdown p {
+  margin: 0 0 10px;
+}
+
+.message-markdown h1,
+.message-markdown h2,
+.message-markdown h3 {
+  margin: 12px 0 8px;
+  color: #111a2e;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.message-markdown h1 {
+  font-size: 20px;
+}
+
+.message-markdown h2 {
+  font-size: 18px;
+}
+
+.message-markdown ul,
+.message-markdown ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.message-markdown li {
+  margin: 4px 0;
+}
+
+.message-markdown a {
+  color: #004a98;
+  font-weight: 800;
+}
+
+.message-markdown blockquote {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid #8fb1d8;
+  background: #f4f8fc;
+  color: #2f405c;
+}
+
+.message-markdown code {
+  padding: 2px 5px;
+  border: 1px solid #dce3ed;
+  border-radius: 2px;
+  background: #f7fafc;
+  color: #163344;
+  font-size: 0.92em;
+}
+
+.message-markdown pre {
+  margin: 10px 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid #dce3ed;
+  border-radius: 2px;
+  background: #f7fafc;
+}
+
+.message-markdown pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  white-space: pre;
 }
 
 .message-bubble.typing {

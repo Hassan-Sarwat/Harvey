@@ -12,11 +12,12 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.5"
     legal_data_hub_base_url: str = "https://otto-schmidt.legal-data-hub.com"
+    legal_data_hub_qna_path: str = "/api/qna"
     legal_data_hub_search_path: str = "/api/search"
     legal_data_hub_token_url: str = "https://online.otto-schmidt.de/token"
     legal_data_hub_data_assets: str = "Gesetze,Rechtsprechung"
     legal_data_hub_auth_mode: str = "oauth2"
-    legal_data_hub_timeout: float = 8.0
+    legal_data_hub_timeout: float = 20.0
     use_legal_fallback: bool = True
     upload_storage_dir: str = "storage"
     database_url: str | None = None
