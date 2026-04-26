@@ -440,7 +440,7 @@ function AskDonnaView(props: {
             {props.isFinalVersion && props.mode === "contract_review" ? (
               <div className="final-banner">
                 <ShieldCheck size={18} />
-                Donna will store this contract in History as approved only if all checks pass. Unresolved findings will be marked pending Legal.
+                Donna will approve only clean packages. Missing referenced files become Needs business input before anything is sent to Legal.
               </div>
             ) : null}
             {props.error ? <div className="error-box">{props.error}</div> : null}
@@ -462,12 +462,22 @@ function MarkdownMessage({ content }: { content: string }) {
 function ChatResultSummary({ result }: { result: RunResult }) {
   return (
     <div className="chat-result-summary">
-      <span className={result.contract_status === "approved" ? "status-pill approved" : result.contract_status === "pending_legal" ? "status-pill warning" : "status-pill"}>
+      <span className={statusPillClass(result.contract_status)}>
         {result.contract_status ? result.contract_status.replace("_", " ") : result.escalation_state}
       </span>
+      {result.contract_status === "needs_business_input" || result.escalation_state === "Needs business input" ? (
+        <small>Missing package input required before Legal</small>
+      ) : null}
       {result.source_usage?.length ? <small>{result.source_usage.length} source group(s) recorded</small> : null}
     </div>
   );
+}
+
+function statusPillClass(status: RunResult["contract_status"]): string {
+  if (status === "approved") return "status-pill approved";
+  if (status === "pending_legal") return "status-pill warning";
+  if (status === "needs_business_input") return "status-pill business-input";
+  return "status-pill";
 }
 
 function Selector({ title, icon, items, selected, onToggle }: { title: string; icon: ReactNode; items: ConfigItem[]; selected: string[]; onToggle: (id: string) => void }) {
@@ -587,6 +597,14 @@ function MatterPanel({ result }: { result: RunResult | null }) {
         <span>{summary.uploaded_documents} document(s) expected</span>
         <span>{summary.personal_data ? "Personal data likely" : "Personal data not confirmed"}</span>
       </div>
+      {summary.missing_documents.length ? (
+        <div className="missing-docs-mini">
+          <strong>Missing before Legal</strong>
+          {summary.missing_documents.slice(0, 4).map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

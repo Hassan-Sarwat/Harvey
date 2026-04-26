@@ -21,7 +21,7 @@ async def test_contract_review_workflow_returns_aggregate():
 
     assert result.agent_name == "risk_aggregator"
     assert result.requires_escalation is True
-    assert result.metadata["agent_count"] == 3
+    assert result.metadata["agent_count"] == 4
 
 
 async def test_legal_qa_workflow_returns_company_and_legal_basis():

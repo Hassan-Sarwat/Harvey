@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.agents.base import AgentResult, ReviewContext
+from app.agents.completeness_checker import CompletenessCheckerAgent
 from app.agents.contract_understanding import ContractUnderstandingAgent
 from app.agents.legal_checker import LegalCheckerAgent
 from app.agents.playbook_checker import PlaybookCheckerAgent
@@ -11,6 +12,7 @@ class ContractReviewWorkflow:
     def __init__(self) -> None:
         self.agents = [
             ContractUnderstandingAgent(),
+            CompletenessCheckerAgent(),
             PlaybookCheckerAgent(),
             LegalCheckerAgent(),
         ]

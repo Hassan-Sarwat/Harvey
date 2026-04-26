@@ -106,6 +106,7 @@ async def review_contract_by_identity(request: ContractReviewRequest) -> dict:
             "version_number": version_number,
             "is_new_contract": is_new_contract,
             "contract_type_source": contract_type_source,
+            "uploaded_documents": [{"filename": "contract.txt", "text": contract_document["text"]}],
         },
     )
     result = await ContractReviewWorkflow().run(context)
@@ -182,6 +183,7 @@ async def review_uploaded_contract_by_identity(
             "version_number": version_number,
             "is_new_contract": is_new_contract,
             "contract_type_source": contract_type_source,
+            "uploaded_documents": [{"filename": file.filename or "contract", "text": contract_document["text"]}],
         },
     )
     result = await ContractReviewWorkflow().run(context)
@@ -256,6 +258,7 @@ async def review_contract(contract_id: str, request: ContractCreateRequest) -> d
         contract_id=contract_id,
         contract_text=request.contract_text,
         contract_type=resolved_contract_type,
+        metadata={"uploaded_documents": [{"filename": "contract.txt", "text": request.contract_text}]},
     )
     result = await ContractReviewWorkflow().run(context)
     _finalize_review_result(result, resolved_contract_type, contract_type_source)
@@ -290,6 +293,7 @@ async def review_uploaded_contract(
             "contract_document": {key: value for key, value in contract_document.items() if key != "text"},
             "playbook_id": playbook_id,
             "contract_type_source": contract_type_source,
+            "uploaded_documents": [{"filename": file.filename or "contract", "text": contract_document["text"]}],
         },
     )
     result = await ContractReviewWorkflow().run(context)
@@ -342,8 +346,27 @@ def _review_payload(
 def _finalize_review_result(result: AgentResult, contract_type: str, contract_type_source: str) -> None:
     result.metadata["recognized_contract_type"] = contract_type
     result.metadata["contract_type_source"] = contract_type_source
-    result.metadata["business_status"] = "needs_revision" if result.findings else "accepted"
+    result.metadata["business_status"] = "needs_business_input" if _review_needs_business_input(result) else "needs_revision" if result.findings else "accepted"
     result.metadata["escalation_available"] = result.requires_escalation
+    result.metadata["needs_business_input"] = _review_needs_business_input(result)
+
+
+def _review_needs_business_input(result: AgentResult) -> bool:
+    if not result.requires_escalation:
+        return False
+    if any(
+        finding.id.startswith(("missing-required-document", "missing-business-input"))
+        and finding.severity.value in {"high", "blocker"}
+        for finding in result.findings
+    ):
+        return True
+    for agent_result in result.metadata.get("agent_results", []) or []:
+        if agent_result.get("agent_name") != "completeness_checker":
+            continue
+        metadata = agent_result.get("metadata", {}) or {}
+        if metadata.get("status") == "needs_business_input" or int(metadata.get("blocking_count") or 0) > 0:
+            return True
+    return False
 
 
 def _resolve_contract_type(contract_type: str | None, contract_text: str) -> tuple[str, str]:

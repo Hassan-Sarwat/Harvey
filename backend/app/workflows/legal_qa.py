@@ -6,7 +6,6 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.services.legal_data_hub import LegalDataHubClient
-from app.services.openai_compat import chat_completion_options
 from app.services.playbook_repository import load_playbook_rows, playbook_file_label, playbook_source_label
 
 logger = logging.getLogger(__name__)
@@ -176,15 +175,13 @@ async def _openai_answer(
 
     try:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.chat.completions.create(
+        response = await client.responses.create(
             model=settings.openai_model,
-            messages=messages,
-            **chat_completion_options(
-                settings.openai_model,
-                max_tokens=1800 if answer_kind == "playbook_summary" else 1000,
-            ),
+            input=messages,
+            max_output_tokens=1800 if answer_kind == "playbook_summary" else 1000,
+            reasoning={"effort": settings.openai_reasoning_effort},
         )
-        return response.choices[0].message.content or ""
+        return response.output_text or ""
     except Exception as exc:
         logger.warning("OpenAI call failed: %s", exc)
         return ""

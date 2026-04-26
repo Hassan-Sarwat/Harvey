@@ -12,7 +12,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from app.agents.base import AgentResult, Finding, ReviewContext, Severity
 from app.services.document_ingestion import extract_document_text
 from app.services.escalation_repository import EscalationRepository
-from app.services.history_repository import APPROVED, PENDING_LEGAL, HistoryRepository
+from app.services.history_repository import APPROVED, NEEDS_BUSINESS_INPUT, PENDING_LEGAL, HistoryRepository
 from app.workflows.general_question import GeneralQuestionRequest, GeneralQuestionWorkflow
 from app.workflows.legal_qa import LegalQARequest, LegalQAWorkflow
 from app.workflows.review_contract import ContractReviewWorkflow
@@ -76,6 +76,11 @@ AGENTS = [
         "id": "contract_understanding",
         "label": "Contract Understanding",
         "description": "Classifies agreement type, party context, and likely contract domain.",
+    },
+    {
+        "id": "completeness_checker",
+        "label": "Completeness Checker",
+        "description": "Builds a dynamic expected-file list and blocks Legal submission when ticket materials are missing.",
     },
     {
         "id": "playbook_checker",
@@ -260,6 +265,7 @@ async def _run_intake(
                 "selected_sources": selected_sources,
                 "selected_agents": selected_agents,
                 "uploaded_filenames": [item["filename"] for item in uploaded_texts],
+                "uploaded_documents": uploaded_texts,
             },
         )
     )
@@ -267,12 +273,13 @@ async def _run_intake(
         LegalQARequest(question=question, use_case="legal_intake", contract_type=contract_type)
     )
 
-    escalation_state = _escalation_state(review_result)
+    legal_escalation_triggered = review_result.requires_escalation
+    escalation_state = _escalation_state(review_result, legal_qa_escalate=False)
     auto_sources = _auto_sources(contract_type, legal_qa.legal_basis, uploaded_texts)
     selected_sources = selected_sources or auto_sources
     legal_sources = [_legal_source_payload(item) for item in legal_qa.legal_basis]
     source_usage = _source_usage(selected_sources, legal_qa.company_basis, legal_sources, uploaded_texts, contract_type)
-    contract_status = _contract_history_status(is_final_version, review_result, legal_qa.escalate)
+    contract_status = _contract_history_status(is_final_version, review_result, legal_qa_escalate=False)
     escalation = _maybe_create_final_escalation(
         contract_status=contract_status,
         contract_id=contract_id,
@@ -292,10 +299,10 @@ async def _run_intake(
         "routing_summary": _routing_summary(routed_agents, contract_type, selected_agents),
         "escalation_state": escalation_state,
         "confidence": review_result.confidence,
-        "plain_answer": _plain_answer(escalation_state, review_result, legal_qa.escalate, contract_status),
+        "plain_answer": _plain_answer(escalation_state, review_result, legal_qa_escalate=False, contract_status=contract_status),
         "legal_answer": _legal_answer(legal_qa),
-        "next_action": _next_action(review_result, legal_qa.escalate, contract_status),
-        "matter_summary": _matter_summary(contract_text, contract_type, uploaded_texts, review_result),
+        "next_action": _next_action(review_result, legal_qa_escalate=False, contract_status=contract_status),
+        "matter_summary": _matter_summary(contract_text, contract_type, uploaded_texts, review_result, legal_escalation_triggered),
         "agent_steps": _agent_steps(review_result, created_at),
         "findings": [_finding_payload(finding) for finding in review_result.findings],
         "legal_sources": legal_sources,
@@ -308,6 +315,7 @@ async def _run_intake(
         "metrics": {
             "finding_count": len(review_result.findings),
             "requires_escalation": review_result.requires_escalation,
+            "needs_business_input": _needs_business_input(review_result),
             "contract_type": contract_type,
             "uploaded_documents": len(uploaded_texts),
             "legal_qa_escalate": legal_qa.escalate,
@@ -534,9 +542,9 @@ def _infer_contract_type(text: str) -> str:
 
 
 def _auto_route_agents(text: str, contract_type: str) -> list[str]:
-    routed = ["contract_understanding", "playbook_checker", "risk_aggregator"]
+    routed = ["contract_understanding", "completeness_checker", "playbook_checker", "risk_aggregator"]
     if contract_type in {"data_protection", "litigation"} or any(term in text.lower() for term in ("gdpr", "liability", "waive")):
-        routed.insert(2, "legal_checker")
+        routed.insert(3, "legal_checker")
     return routed
 
 
@@ -616,10 +624,13 @@ def _routing_summary(routed_agents: list[str], contract_type: str, selected_agen
     return f"Auto Mode inferred {contract_type.replace('_', ' ')} context and routed to {labels}."
 
 
-def _escalation_state(result: AgentResult) -> str:
+def _escalation_state(result: AgentResult, legal_qa_escalate: bool = False) -> str:
+    legal_escalation_triggered = result.requires_escalation or legal_qa_escalate
+    if legal_escalation_triggered and _needs_business_input(result):
+        return "Needs business input"
     if result.requires_escalation:
         return "Legal review required before signature"
-    if result.findings:
+    if _non_completeness_findings(result):
         return "Legal review recommended"
     return "No legal escalation recommended"
 
@@ -630,6 +641,9 @@ def _plain_answer(
     legal_qa_escalate: bool,
     contract_status: str | None,
 ) -> str:
+    legal_escalation_triggered = result.requires_escalation or legal_qa_escalate
+    if (contract_status == NEEDS_BUSINESS_INPUT) or (legal_escalation_triggered and _needs_business_input(result)):
+        return "Donna found review issues, but the ticket package needs business input before Legal receives it."
     if contract_status == APPROVED:
         return "The final version is approved for the demo workflow because the review found no unresolved playbook or legal checks."
     if contract_status == PENDING_LEGAL:
@@ -738,8 +752,11 @@ def _legal_basis_sentence(legal_basis: list[dict[str, Any]]) -> str:
 
 
 def _next_action(result: AgentResult, legal_qa_escalate: bool, contract_status: str | None = None) -> str:
+    legal_escalation_triggered = result.requires_escalation or legal_qa_escalate
     if contract_status == APPROVED:
         return "The contract is stored in History as approved."
+    if contract_status == NEEDS_BUSINESS_INPUT or (legal_escalation_triggered and _needs_business_input(result)):
+        return "Ask the business owner to upload the missing referenced file(s) or record why they are unavailable, then rerun the review before sending to Legal."
     if contract_status == PENDING_LEGAL:
         return "Open the History record or escalation context for Legal review before signature."
     if result.requires_escalation or legal_qa_escalate:
@@ -752,7 +769,10 @@ def _next_action(result: AgentResult, legal_qa_escalate: bool, contract_status: 
 def _contract_history_status(is_final_version: bool, result: AgentResult, legal_qa_escalate: bool) -> str | None:
     if not is_final_version:
         return None
-    if result.findings or result.requires_escalation:
+    legal_escalation_triggered = result.requires_escalation or legal_qa_escalate
+    if legal_escalation_triggered and _needs_business_input(result):
+        return NEEDS_BUSINESS_INPUT
+    if _non_completeness_findings(result) or result.requires_escalation:
         return PENDING_LEGAL
     return APPROVED
 
@@ -789,14 +809,54 @@ def _visible_reasoning(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _needs_business_input(result: AgentResult) -> bool:
+    if any(
+        finding.id.startswith(("missing-required-document", "missing-business-input"))
+        and finding.severity in {Severity.HIGH, Severity.BLOCKER}
+        for finding in result.findings
+    ):
+        return True
+    for agent_result in result.metadata.get("agent_results", []) or []:
+        if agent_result.get("agent_name") != "completeness_checker":
+            continue
+        metadata = agent_result.get("metadata", {}) or {}
+        if metadata.get("status") == "needs_business_input" or int(metadata.get("blocking_count") or 0) > 0:
+            return True
+    return False
+
+
+def _non_completeness_findings(result: AgentResult) -> list[Finding]:
+    return [
+        finding
+        for finding in result.findings
+        if not finding.id.startswith(("missing-required-document", "missing-business-input"))
+    ]
+
+
+def _completeness_missing_labels(result: AgentResult) -> list[str]:
+    labels: list[str] = []
+    for agent_result in result.metadata.get("agent_results", []) or []:
+        if agent_result.get("agent_name") != "completeness_checker":
+            continue
+        metadata = agent_result.get("metadata", {}) or {}
+        for item in metadata.get("missing_items") or []:
+            label = str(item.get("label") or "").strip()
+            if label:
+                labels.append(label)
+    return labels
+
+
 def _matter_summary(
     contract_text: str,
     contract_type: str,
     uploaded_texts: list[dict[str, str]],
     result: AgentResult,
+    legal_escalation_triggered: bool = False,
 ) -> dict[str, Any]:
     missing_documents = []
     finding_ids = {finding.id for finding in result.findings}
+    if legal_escalation_triggered:
+        missing_documents.extend(_completeness_missing_labels(result))
     if "missing-subprocessor-list" in finding_ids or "subprocessor-general-authorization" in finding_ids:
         missing_documents.append("Named subprocessor list")
     if "generic-security-measures" in finding_ids or "audit-rights-too-limited" in finding_ids:
@@ -811,7 +871,7 @@ def _matter_summary(
         "contract_value": "Not provided",
         "personal_data": any(term in contract_text.lower() for term in ("personal data", "gdpr", "data subject")),
         "uploaded_documents": len(uploaded_texts),
-        "missing_documents": missing_documents,
+        "missing_documents": list(dict.fromkeys(missing_documents)),
     }
 
 
@@ -883,7 +943,7 @@ def _finding_payload(finding: Finding) -> dict[str, Any]:
         "severity": _frontend_severity(finding.severity),
         "band": _finding_band(finding),
         "description": finding.description,
-        "recommendation": "Use the suggested language or route the issue to Legal.",
+        "recommendation": _finding_recommendation(finding),
         "evidence": [
             {
                 "source_type": item.source,
@@ -899,6 +959,8 @@ def _finding_payload(finding: Finding) -> dict[str, Any]:
 
 
 def _finding_category(finding: Finding) -> str:
+    if finding.id.startswith("missing-required-document") or finding.id.startswith("missing-business-input"):
+        return "Completeness"
     if "data" in finding.id or "subprocessor" in finding.id or "breach" in finding.id:
         return "Data protection"
     if "liability" in finding.id or "settlement" in finding.id or "privilege" in finding.id:
@@ -906,6 +968,12 @@ def _finding_category(finding: Finding) -> str:
     if "bmw" in finding.id:
         return "Completeness"
     return "Playbook"
+
+
+def _finding_recommendation(finding: Finding) -> str:
+    if finding.id.startswith("missing-required-document") or finding.id.startswith("missing-business-input"):
+        return "Collect the missing business input before sending this ticket to Legal."
+    return "Use the suggested language or route the issue to Legal."
 
 
 def _frontend_severity(severity: Severity) -> str:

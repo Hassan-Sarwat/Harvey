@@ -56,7 +56,7 @@ async def test_intake_demo_uses_sample_contract_and_returns_findings(monkeypatch
 
     assert payload["question"] == intake.DEMO_QUESTION
     assert payload["findings"]
-    assert payload["escalation_state"] == "Legal review required before signature"
+    assert payload["escalation_state"] in {"Needs business input", "Legal review required before signature"}
     assert payload["suggested_language"]
 
 
@@ -468,6 +468,50 @@ async def test_final_contract_review_sets_history_status(tmp_path, monkeypatch):
     assert detail is not None
     assert detail["contract_status"] == "pending_legal"
     assert any(event["event_type"] == "pending_legal" for event in detail["events"])
+
+
+async def test_final_contract_review_blocks_legal_when_referenced_attachment_missing(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'harvey.db'}"
+    monkeypatch.setattr(intake, "HistoryRepository", lambda: HistoryRepository(database_url))
+    monkeypatch.setattr(intake, "EscalationRepository", lambda: EscalationRepository(database_url))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    payload = await intake.analyze(
+        message="This is the final version. Supplier accepts unlimited liability. The technical measures are set out in Attachment 8.",
+        mode="contract_review",
+        is_final_version=True,
+        files=[
+            _upload_file(
+                "Nimbus_DPA_Test_Contract.txt",
+                b"BMW and Nimbus sign this DPA. Supplier accepts unlimited liability. The technical measures are set out in Attachment 8.",
+            )
+        ],
+    )
+
+    assert payload["contract_status"] == "needs_business_input"
+    assert payload["escalation_state"] == "Needs business input"
+    assert payload["escalation_id"] is None
+    assert "Attachment 8" in payload["matter_summary"]["missing_documents"]
+    detail = HistoryRepository(database_url).get_item(payload["history_thread_id"])
+    assert detail is not None
+    assert any(event["event_type"] == "needs_business_input" for event in detail["events"])
+
+
+async def test_missing_attachment_does_not_create_legal_escalation_without_legal_trigger(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'harvey.db'}"
+    monkeypatch.setattr(intake, "HistoryRepository", lambda: HistoryRepository(database_url))
+    monkeypatch.setattr(LegalDataHubClient, "search_evidence", _fake_search_evidence)
+
+    payload = await intake.analyze(
+        message="This is the final version. Effective Date: 1 January 2026. Services agreement between BMW and ACME for a training workshop. The agenda is set out in Attachment 8.",
+        mode="contract_review",
+        is_final_version=True,
+        files=[],
+    )
+
+    assert payload["escalation_state"] == "No legal escalation recommended"
+    assert payload["contract_status"] == "approved"
+    assert payload["matter_summary"]["missing_documents"] == []
 
 
 def _upload_file(filename: str, content: bytes) -> UploadFile:

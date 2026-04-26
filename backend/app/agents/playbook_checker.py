@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
 from app.agents.trigger_utils import missing_term_trigger, sentence_trigger_for_phrase
-from app.services.playbook_repository import get_playbook_rule, playbook_source_label
+from app.services.playbook_repository import get_playbook_rule, load_playbook_rows, playbook_source_label
+
+
+logger = logging.getLogger(__name__)
 
 
 PLAYBOOK_SOURCE = "BMW playbook"
@@ -18,6 +25,10 @@ class PlaybookCheckerAgent(Agent):
         suggestions: list[Suggestion] = []
         text = context.contract_text.lower()
         uploaded_playbook_evidence = _uploaded_playbook_evidence(context.playbook_documents)
+        llm_result = await _openai_playbook_check(context, uploaded_playbook_evidence)
+        if llm_result is not None:
+            return llm_result
+
         dp_001 = get_playbook_rule("data_protection", "DP-001")
         dp_002 = get_playbook_rule("data_protection", "DPA-002")
         dp_003 = get_playbook_rule("data_protection", "DPA-003")
@@ -404,6 +415,229 @@ class PlaybookCheckerAgent(Agent):
                 + [str(document.get("filename")) for document in context.playbook_documents],
             },
         )
+
+
+class PlaybookLLMFinding(BaseModel):
+    id: str
+    title: str
+    description: str
+    severity: str
+    clause_reference: str | None = None
+    trigger_quote: str | None = None
+    playbook_scope: str
+    rule_id: str
+    rule_title: str
+    rule_quote: str
+    requires_escalation: bool
+    proposed_text: str | None = None
+    rationale: str | None = None
+
+
+class PlaybookLLMResult(BaseModel):
+    summary: str
+    findings: list[PlaybookLLMFinding] = Field(default_factory=list)
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+
+
+async def _openai_playbook_check(
+    context: ReviewContext,
+    uploaded_playbook_evidence: list[Evidence],
+) -> AgentResult | None:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return None
+
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        logger.warning("openai package is not installed; using fallback playbook checker")
+        return None
+
+    scopes = _relevant_scopes(context)
+    playbook_rows = [row for scope in scopes for row in load_playbook_rows(scope)]
+    if not playbook_rows:
+        return None
+
+    try:
+        llm_rows = [_row_for_llm(row, scope) for scope in scopes for row in load_playbook_rows(scope)]
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        response = await client.responses.create(
+            model=settings.openai_model,
+            reasoning={"effort": settings.openai_reasoning_effort},
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Harvey's BMW playbook checker. Review the contract only against the supplied playbook rows. "
+                        "Return every materially relevant deviation, missing required position, fallback issue, or red line. "
+                        "If a contract position is acceptable under the playbook, do not flag it. Use JSON only."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "contract_type": context.contract_type or "unknown",
+                            "playbook_scopes": scopes,
+                            "contract_text": context.contract_text[:45000],
+                            "playbook_rows": llm_rows,
+                            "instructions": [
+                                "Classify the contract matter and use the relevant BMW playbook rows.",
+                                "Compare the draft language to default, preferred, fallback, red-line, and escalation-trigger fields.",
+                                "Cite the exact playbook rule ID and the contract quote that triggered the finding.",
+                                "Set requires_escalation true for blocker/high red lines or explicit escalation triggers.",
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "playbook_contract_review",
+                    "strict": True,
+                    "schema": _playbook_json_schema(),
+                }
+            },
+        )
+        parsed = PlaybookLLMResult.model_validate(json.loads(response.output_text or "{}"))
+    except Exception as exc:
+        logger.warning("OpenAI playbook check failed; using fallback playbook checker: %s", exc)
+        return None
+
+    findings = [_finding_from_llm(item, uploaded_playbook_evidence) for item in parsed.findings]
+    suggestions = [
+        Suggestion(
+            finding_id=item.id,
+            proposed_text=item.proposed_text or "Use the BMW-approved playbook position or route the deviation for approval.",
+            rationale=item.rationale or f"BMW playbook rule {item.rule_id} controls this issue.",
+        )
+        for item in parsed.findings
+        if item.proposed_text or item.requires_escalation
+    ]
+    return AgentResult(
+        agent_name=PlaybookCheckerAgent.name,
+        summary=parsed.summary or "Checked draft against the relevant BMW playbook rows using OpenAI.",
+        findings=findings,
+        suggestions=suggestions,
+        confidence=parsed.confidence,
+        requires_escalation=any(f.requires_escalation for f in findings),
+        metadata={
+            "source": "openai",
+            "playbook_scopes": scopes,
+            "playbook_sources": [playbook_source_label(scope) for scope in scopes],
+            "playbook_row_count": len(playbook_rows),
+        },
+    )
+
+
+def _relevant_scopes(context: ReviewContext) -> list[str]:
+    normalized = (context.contract_type or "").lower()
+    if normalized == "data_protection":
+        return ["data_protection"]
+    if normalized == "litigation":
+        return ["litigation"]
+    text = context.contract_text.lower()
+    scopes: list[str] = []
+    if any(term in text for term in ("gdpr", "personal data", "processor", "controller", "subprocessor", "dpa")):
+        scopes.append("data_protection")
+    if any(term in text for term in ("litigation", "settlement", "liability", "court", "arbitration", "claims")):
+        scopes.append("litigation")
+    return scopes or ["data_protection", "litigation"]
+
+
+def _row_for_llm(row: dict[str, Any], scope: str) -> dict[str, Any]:
+    return {
+        "scope": scope,
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "severity": row.get("severity"),
+        "default": row.get("default"),
+        "preferred_position": row.get("preferred_position"),
+        "fallback_1": row.get("fallback_1"),
+        "fallback_2": row.get("fallback_2"),
+        "red_line": row.get("red_line"),
+        "escalation_trigger": row.get("escalation_trigger"),
+        "legal_basis": row.get("legal_basis"),
+        "approved_fix": row.get("approved_fix"),
+    }
+
+
+def _playbook_json_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "summary": {"type": "string"},
+            "confidence": {"type": "number"},
+            "findings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                        "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "blocker"]},
+                        "clause_reference": {"type": ["string", "null"]},
+                        "trigger_quote": {"type": ["string", "null"]},
+                        "playbook_scope": {"type": "string", "enum": ["data_protection", "litigation"]},
+                        "rule_id": {"type": "string"},
+                        "rule_title": {"type": "string"},
+                        "rule_quote": {"type": "string"},
+                        "requires_escalation": {"type": "boolean"},
+                        "proposed_text": {"type": ["string", "null"]},
+                        "rationale": {"type": ["string", "null"]},
+                    },
+                    "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "clause_reference",
+                        "trigger_quote",
+                        "playbook_scope",
+                        "rule_id",
+                        "rule_title",
+                        "rule_quote",
+                        "requires_escalation",
+                        "proposed_text",
+                        "rationale",
+                    ],
+                },
+            },
+        },
+        "required": ["summary", "confidence", "findings"],
+    }
+
+
+def _finding_from_llm(item: PlaybookLLMFinding, uploaded_playbook_evidence: list[Evidence]) -> Finding:
+    scope = item.playbook_scope if item.playbook_scope in {"data_protection", "litigation"} else "data_protection"
+    ruling = RulingReference(
+        source=f"{PLAYBOOK_SOURCE}: {playbook_source_label(scope)}",
+        citation=f"{item.rule_id} - {item.rule_title}",
+        quote=item.rule_quote,
+    )
+    trigger = ContractTrigger(text=item.trigger_quote, start=None, end=None) if item.trigger_quote else None
+    try:
+        severity = Severity(item.severity)
+    except ValueError:
+        severity = Severity.MEDIUM
+    return Finding(
+        id=item.id,
+        title=item.title,
+        description=item.description,
+        severity=severity,
+        clause_reference=item.clause_reference or item.trigger_quote,
+        trigger=trigger,
+        ruling=ruling,
+        evidence=[_evidence_from_ruling(ruling)] + uploaded_playbook_evidence,
+        requires_escalation=item.requires_escalation,
+    )
 
 
 def _uploaded_playbook_evidence(documents: list[dict]) -> list[Evidence]:

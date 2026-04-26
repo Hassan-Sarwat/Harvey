@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     lda_secret: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.5"
+    openai_reasoning_effort: str = "medium"
     legal_data_hub_base_url: str = "https://otto-schmidt.legal-data-hub.com"
     legal_data_hub_qna_path: str = "/api/qna"
     legal_data_hub_search_path: str = "/api/search"

@@ -13,8 +13,9 @@ from app.services.contract_repository import Base, _build_engine, _default_datab
 
 APPROVED = "approved"
 PENDING_LEGAL = "pending_legal"
+NEEDS_BUSINESS_INPUT = "needs_business_input"
 DROPPED = "dropped"
-CONTRACT_HISTORY_STATUSES = {APPROVED, PENDING_LEGAL, DROPPED}
+CONTRACT_HISTORY_STATUSES = {APPROVED, PENDING_LEGAL, NEEDS_BUSINESS_INPUT, DROPPED}
 
 
 def _utc_now() -> datetime:
@@ -334,6 +335,8 @@ def _ai_event_type(contract_status: str | None) -> str:
         return "approved"
     if contract_status == PENDING_LEGAL:
         return "pending_legal"
+    if contract_status == NEEDS_BUSINESS_INPUT:
+        return "needs_business_input"
     return "ai_reply"
 
 
@@ -342,4 +345,6 @@ def _ai_event_summary(result_payload: dict[str, Any], contract_status: str | Non
         return "AI approved the final contract version because no findings or escalation triggers remained."
     if contract_status == PENDING_LEGAL:
         return "AI marked the final contract version as pending Legal because unresolved findings or escalation triggers remain."
+    if contract_status == NEEDS_BUSINESS_INPUT:
+        return "AI blocked Legal submission because the ticket package needs business input before escalation."
     return str(result_payload.get("routing_summary") or result_payload.get("plain_answer") or "AI replied to the thread.")
