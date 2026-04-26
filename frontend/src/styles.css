@@ -1680,6 +1680,18 @@ pre {
   background: #ffffff;
 }
 
+.history-message-speaker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-donna-avatar {
+  width: 26px;
+  height: 26px;
+  box-shadow: none;
+}
+
 .history-message strong {
   color: #003a7c;
   font-size: 13px;

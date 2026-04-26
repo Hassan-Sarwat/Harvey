@@ -529,9 +529,9 @@ function AskDonnaView(props: {
   );
 }
 
-function DonnaAvatar() {
+function DonnaAvatar({ className = "" }: { className?: string }) {
   return (
-    <div className="message-avatar donna-avatar" aria-label="Donna" role="img">
+    <div className={`message-avatar donna-avatar ${className}`.trim()} aria-label="Donna" role="img">
       <img src={donnaLogo} alt="" />
     </div>
   );
@@ -903,7 +903,10 @@ function HistoryView({
                   <h3>Transcript</h3>
                   {selected.messages.map((message) => (
                     <div className={`history-message ${message.role}`} key={message.id}>
-                      <strong>{message.role === "assistant" ? "Donna" : "Business"}</strong>
+                      <div className="history-message-speaker">
+                        {message.role === "assistant" ? <DonnaAvatar className="history-donna-avatar" /> : null}
+                        <strong>{message.role === "assistant" ? "Donna" : "Business"}</strong>
+                      </div>
                       <p>{message.content}</p>
                     </div>
                   ))}
