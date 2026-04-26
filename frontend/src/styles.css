@@ -35,9 +35,7 @@ button {
 }
 
 .sidebar {
-  background:
-    radial-gradient(circle at 28px 28px, rgba(34, 126, 203, 0.36), transparent 68px),
-    linear-gradient(180deg, #061a35 0%, #04152d 55%, #031225 100%);
+  background: #061a35;
   color: #f7fbff;
   padding: 28px 16px 22px;
   display: flex;
@@ -60,11 +58,9 @@ button {
   place-items: center;
   border-radius: 50%;
   font-weight: 900;
-  color: #031225;
+  color: #ffffff;
   border: 2px solid rgba(255, 255, 255, 0.78);
-  background:
-    radial-gradient(circle, #f7fbff 0 28%, transparent 29%),
-    conic-gradient(#1d74bd 0 25%, #f7fbff 25% 50%, #1d74bd 50% 75%, #f7fbff 75% 100%);
+  background: #1d74bd;
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
 }
 
@@ -121,7 +117,7 @@ button {
 .nav-item.active {
   color: #ffffff;
   border-color: rgba(80, 153, 238, 0.95);
-  background: linear-gradient(90deg, rgba(24, 86, 164, 0.88), rgba(11, 51, 103, 0.56));
+  background: #174f92;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
