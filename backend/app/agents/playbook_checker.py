@@ -4,7 +4,7 @@ from typing import Any
 
 from app.agents.base import Agent, AgentResult, Evidence, Finding, ReviewContext, RulingReference, Severity, Suggestion
 from app.agents.trigger_utils import missing_term_trigger, sentence_trigger_for_phrase
-from app.services.playbook_repository import get_playbook_rule, playbook_source_label
+from app.services.playbook_repository import get_playbook_rule, playbook_file_label, playbook_source_label
 
 
 PLAYBOOK_SOURCE = "BMW playbook"
@@ -402,6 +402,7 @@ class PlaybookCheckerAgent(Agent):
                 "playbook_document_count": len(context.playbook_documents),
                 "playbook_sources": [playbook_source_label("data_protection"), playbook_source_label("litigation")]
                 + [str(document.get("filename")) for document in context.playbook_documents],
+                "playbook_files": [playbook_file_label("data_protection"), playbook_file_label("litigation")],
             },
         )
 

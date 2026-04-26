@@ -7,7 +7,12 @@ from pydantic import BaseModel
 
 from app.services.legal_data_hub import LegalDataHubClient
 from app.services.openai_compat import chat_completion_options
-from app.services.playbook_repository import load_playbook_rows, playbook_file_label, playbook_source_label
+from app.services.playbook_repository import (
+    load_playbook_markdown,
+    load_playbook_rows,
+    playbook_file_label,
+    playbook_source_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,7 @@ class LegalQAWorkflow:
         ai_summary = await _openai_answer(
             question=request.question,
             all_rows=all_rows,
+            playbook_markdown=load_playbook_markdown(domain) if want_playbook else "",
             legal_basis=legal_basis,
             thread_id=request.thread_id,
             want_playbook=want_playbook,
@@ -118,6 +124,7 @@ async def _openai_answer(
     *,
     question: str,
     all_rows: list[dict[str, str]],
+    playbook_markdown: str,
     legal_basis: list[dict],
     thread_id: str | None,
     want_playbook: bool,
@@ -144,9 +151,12 @@ async def _openai_answer(
     system_parts = [_SYSTEM_PROMPT_CORE]
 
     if want_playbook and all_rows:
+        playbook_context = _format_playbook_for_context(all_rows)
+        if playbook_markdown:
+            playbook_context += "\n\n## Source Markdown Playbook\n\n" + playbook_markdown
         system_parts.append(
             "\n## BMW Negotiation Playbook (complete)\n\n"
-            + _format_playbook_for_context(all_rows)
+            + playbook_context
         )
     elif want_playbook:
         system_parts.append("\n## BMW Negotiation Playbook\nNo playbook rules were found for this domain.")

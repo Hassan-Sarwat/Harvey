@@ -9,7 +9,12 @@ from pydantic import BaseModel, Field
 
 from app.services.legal_data_hub import LegalDataHubClient
 from app.services.openai_compat import chat_completion_options
-from app.services.playbook_repository import load_playbook_rows, playbook_file_label, playbook_source_label
+from app.services.playbook_repository import (
+    load_playbook_markdown,
+    load_playbook_rows,
+    playbook_file_label,
+    playbook_source_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +277,7 @@ def _system_prompt(playbook_rows: list[dict[str, str]], *, legal_evidence_prefet
             "",
             "## Complete Active BMW Playbooks",
             _format_playbooks_for_context(playbook_rows),
+            _format_markdown_playbooks_for_context(),
         ]
     )
 
@@ -612,6 +618,13 @@ def _format_playbooks_for_context(rows: list[dict[str, str]]) -> str:
                 lines.append(f"{label}: {value}")
         sections.append("\n".join(lines))
     return "\n\n".join(sections) if sections else "No active playbook rows were found."
+
+
+def _format_markdown_playbooks_for_context() -> str:
+    dpa_markdown = load_playbook_markdown("data_protection").strip()
+    if not dpa_markdown:
+        return ""
+    return "\n\n## Source Markdown DPA Playbook\n\n" + dpa_markdown
 
 
 def _company_basis_from_rows(rows: list[dict[str, str]]) -> list[dict]:

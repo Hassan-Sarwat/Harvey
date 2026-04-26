@@ -98,7 +98,7 @@ async def test_legal_qa_workflow_references_specific_internal_playbook_rule():
     )
 
     assert result.company_basis[0] == {
-        "source": "BMW Group DPA negotiation playbook: bmw_group_dpa_negotiation_playbook.csv",
+        "source": "BMW Group DPA negotiation playbook: dpa_negotiation_playbook.md",
         "citation": "DPA-003 - Data subject rights assistance",
         "quote": "Processor must promptly notify BMW Group of requests and assist BMW Group without responding directly unless instructed or legally required.",
         "severity": "high",

@@ -30,6 +30,7 @@ import {
 import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { analyzeMatter, askEscalationQuestion, decideEscalation, dropHistoryItem, getDashboard, getEscalation, getHistory, getHistoryItem, listEscalations } from "./api";
+import donnaLogo from "./assets/donna-logo.png";
 import type { AgentMetric, AskMode, ConfigItem, DashboardMetrics, EscalationDetail, EscalationListItem, EscalationStatus, Finding, HistoryDetail, HistorySummary, RunResult, Severity, Suggestion, TriggerAnnotation } from "./types";
 
 const mockMatterSummary = {
@@ -375,7 +376,7 @@ function AskDonnaView(props: {
             ) : null}
             {props.chatMessages.map((item, index) => (
               <div className={`chat-message ${item.role}`} key={`${item.role}-${index}`}>
-                <div className="message-avatar">{item.role === "user" ? "You" : "D"}</div>
+                <MessageAvatar role={item.role} />
                 <div className="message-bubble">
                   {item.role === "assistant" ? <MarkdownMessage content={item.content} /> : <p>{item.content}</p>}
                   {item.result ? <ChatResultSummary result={item.result} /> : null}
@@ -384,7 +385,7 @@ function AskDonnaView(props: {
             ))}
             {props.isRunning ? (
               <div className="chat-message assistant">
-                <div className="message-avatar">D</div>
+                <MessageAvatar role="assistant" />
                 <div className="message-bubble typing">
                   <Loader2 className="spin" size={18} />
                   Donna is checking sources and routing agents.
@@ -436,7 +437,7 @@ function AskDonnaView(props: {
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") props.onAnalyze();
               }}
-              rows={5}
+              rows={4}
               placeholder={placeholder}
             />
             <UploadBox files={props.files} setFiles={props.setFiles} />
@@ -464,6 +465,18 @@ function AskDonnaView(props: {
   );
 }
 
+function MessageAvatar({ role }: { role: "user" | "assistant" }) {
+  if (role === "user") {
+    return <div className="message-avatar">You</div>;
+  }
+
+  return (
+    <div className="message-avatar donna-avatar" aria-label="Donna">
+      <img src={donnaLogo} alt="" />
+    </div>
+  );
+}
+
 function MarkdownMessage({ content }: { content: string }) {
   return (
     <div className="message-markdown">
@@ -473,14 +486,22 @@ function MarkdownMessage({ content }: { content: string }) {
 }
 
 function ChatResultSummary({ result }: { result: RunResult }) {
+  const sourceSummary = formatSourceSummary(result.source_usage ?? []);
   return (
     <div className="chat-result-summary">
       <span className={result.contract_status === "approved" ? "status-pill approved" : result.contract_status === "pending_legal" ? "status-pill warning" : "status-pill"}>
         {result.contract_status ? result.contract_status.replace("_", " ") : result.escalation_state}
       </span>
-      {result.source_usage?.length ? <small>{result.source_usage.length} source group(s) recorded</small> : null}
+      {sourceSummary ? <small>Sources: {sourceSummary}</small> : null}
     </div>
   );
+}
+
+function formatSourceSummary(sources: NonNullable<RunResult["source_usage"]>) {
+  const labels = sources.map((source) => source.label).filter(Boolean);
+  if (!labels.length) return "";
+  if (labels.length <= 3) return labels.join(", ");
+  return `${labels.slice(0, 3).join(", ")} +${labels.length - 3} more`;
 }
 
 function Selector({ title, icon, items, selected, onToggle }: { title: string; icon: ReactNode; items: ConfigItem[]; selected: string[]; onToggle: (id: string) => void }) {

@@ -7,6 +7,7 @@ from typing import Any
 
 
 SOURCE_BASED_DPA_FILE = "bmw_group_dpa_negotiation_playbook.csv"
+SOURCE_BASED_DPA_MARKDOWN_FILE = "dpa_negotiation_playbook.md"
 DATA_PROTECTION_FALLBACK_FILE = "bmw_data_protection.csv"
 LITIGATION_FILE = "bmw_litigation.csv"
 
@@ -18,6 +19,12 @@ def playbook_source_label(domain: str) -> str:
 
 
 def playbook_file_label(domain: str) -> str:
+    if domain == "litigation":
+        return LITIGATION_FILE
+    return SOURCE_BASED_DPA_MARKDOWN_FILE
+
+
+def playbook_data_file_label(domain: str) -> str:
     if domain == "litigation":
         return LITIGATION_FILE
     return SOURCE_BASED_DPA_FILE
@@ -42,6 +49,15 @@ def get_playbook_rule(domain: str, rule_id: str) -> dict[str, Any]:
             if rule.get("id") == rule_id:
                 return rule
     return {"id": rule_id, "title": rule_id, "default": "Playbook rule unavailable."}
+
+
+def load_playbook_markdown(domain: str) -> str:
+    if domain != "data_protection":
+        return ""
+    path = Path(__file__).resolve().parents[3] / "data" / "playbook" / SOURCE_BASED_DPA_MARKDOWN_FILE
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 @lru_cache(maxsize=8)
