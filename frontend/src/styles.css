@@ -643,18 +643,6 @@ button {
   background: #ffffff;
 }
 
-.legal-flow-launcher {
-  box-shadow: 0 12px 32px rgba(6, 26, 53, 0.08);
-}
-
-.legal-flow-launcher .legal-flow-head {
-  margin: 0;
-}
-
-.legal-flow-modal {
-  width: min(980px, 100%);
-}
-
 .legal-flow-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

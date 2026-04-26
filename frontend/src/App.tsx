@@ -655,7 +655,6 @@ function FootnotedAnswer({
 
 function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAddFiles?: (files: File[]) => void }) {
   const [step, setStep] = useState<"review" | "missing" | "ticket">("review");
-  const [isOpen, setIsOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [addedFiles, setAddedFiles] = useState<string[]>([]);
   const [ticketQuestion, setTicketQuestion] = useState("Please review the flagged playbook deviations and approve the proposed escalation path.");
@@ -669,20 +668,6 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
     onAddFiles?.(incoming);
     setAddedFiles((current) => [...current, ...incoming.map((file) => file.name)]);
   };
-
-  const closeWorkflow = () => {
-    setIsOpen(false);
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeWorkflow();
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [isOpen]);
 
   if (!check || check.status !== "needs_business_input") return null;
 
@@ -870,10 +855,7 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
           <button
             className="legal-flow-next"
             type="button"
-            onClick={() => {
-              setIsOpen(false);
-              setTicketSent(true);
-            }}
+            onClick={() => setTicketSent(true)}
           >
             Send ticket to Legal
             <CheckCircle2 size={16} />
@@ -884,54 +866,24 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
 
   return (
     <>
-      <section className="legal-flow-card legal-flow-launcher" aria-label="Legal review and missing files">
-        <div className="legal-flow-head">
-          <Gavel size={18} />
-          <div>
-            <strong>Recommended for Legal review</strong>
-            <span>{missing.length} referenced file{missing.length === 1 ? "" : "s"} must be added or explained before Legal gets the ticket.</span>
-          </div>
+      <section className="legal-flow-card" aria-label="Legal review and missing files">
+        <div className="legal-flow-steps">
+          <button className={step === "review" ? "active" : ""} type="button" onClick={() => setStep("review")}>
+            <span>1</span>
+            Legal review
+          </button>
+          <button className={step === "missing" ? "active" : ""} type="button" onClick={() => setStep("missing")}>
+            <span>2</span>
+            Missing files
+          </button>
+          <button className={step === "ticket" ? "active" : ""} type="button" onClick={() => setStep("ticket")}>
+            <span>3</span>
+            Ticket details
+          </button>
         </div>
-        <button className="legal-flow-next" type="button" onClick={() => setIsOpen(true)}>
-          Open escalation workflow
-          <ChevronRight size={16} />
-        </button>
+
+        {stepContent}
       </section>
-
-      {isOpen ? (
-        <div className="ticket-modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) closeWorkflow();
-        }}>
-          <section className="ticket-modal legal-flow-modal" role="dialog" aria-modal="true" aria-label="Legal escalation workflow">
-            <div className="ticket-modal-head">
-              <div>
-                <span>Escalation workflow</span>
-                <strong>Prepare Legal review package</strong>
-              </div>
-              <button className="icon-button modal-close-button" type="button" onClick={closeWorkflow} aria-label="Close escalation workflow">
-                ×
-              </button>
-            </div>
-
-            <div className="legal-flow-steps">
-              <button className={step === "review" ? "active" : ""} type="button" onClick={() => setStep("review")}>
-                <span>1</span>
-                Legal review
-              </button>
-              <button className={step === "missing" ? "active" : ""} type="button" onClick={() => setStep("missing")}>
-                <span>2</span>
-                Missing files
-              </button>
-              <button className={step === "ticket" ? "active" : ""} type="button" onClick={() => setStep("ticket")}>
-                <span>3</span>
-                Ticket details
-              </button>
-            </div>
-
-            {stepContent}
-          </section>
-        </div>
-      ) : null}
 
       {ticketSent ? (
         <LegalTicketModal
