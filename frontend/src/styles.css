@@ -1623,7 +1623,8 @@ button {
   background: #ffffff;
   font-size: 14px;
   font-weight: 900;
-  z-index: 1;
+  position: relative;
+  z-index: 2;
   transition: color 180ms ease, border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
@@ -1642,9 +1643,15 @@ button {
 }
 
 .agent-run-copy {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   display: grid;
+  justify-self: start;
   gap: 6px;
+  max-width: 100%;
+  padding-right: 8px;
+  background: #ffffff;
 }
 
 .agent-run-copy strong {
@@ -1676,23 +1683,22 @@ button {
 .agent-run-line {
   position: absolute;
   top: 14px;
-  right: 16px;
-  width: 42px;
-  height: 2px;
-  border: 0;
-  background: linear-gradient(90deg, #ccd8e7 50%, transparent 50%);
-  background-size: 12px 2px;
-  animation: agentDash 1.2s linear infinite;
+  left: 14px;
+  right: -14px;
+  height: 0;
+  border-top: 2px dashed #ccd8e7;
+  animation: agentLinePulse 1.7s ease-in-out infinite;
+  z-index: 0;
 }
 
 .agent-run-step.completed .agent-run-line {
-  background: #1f7a55;
+  border-top-style: solid;
+  border-top-color: #1f7a55;
   animation: none;
 }
 
 .agent-run-step.active .agent-run-line {
-  background: linear-gradient(90deg, #174f92 50%, transparent 50%);
-  background-size: 12px 2px;
+  border-top-color: #174f92;
 }
 
 @keyframes agentPulse {
@@ -1732,9 +1738,14 @@ button {
   }
 }
 
-@keyframes agentDash {
-  to {
-    background-position: 12px 0;
+@keyframes agentLinePulse {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+
+  50% {
+    opacity: 1;
   }
 }
 
