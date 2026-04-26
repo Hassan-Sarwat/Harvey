@@ -643,6 +643,18 @@ button {
   background: #ffffff;
 }
 
+.legal-flow-launcher {
+  box-shadow: 0 12px 32px rgba(6, 26, 53, 0.08);
+}
+
+.legal-flow-launcher .legal-flow-head {
+  margin: 0;
+}
+
+.legal-flow-modal {
+  width: min(980px, 100%);
+}
+
 .legal-flow-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -937,12 +949,31 @@ button {
 }
 
 .ticket-modal-head {
+  position: sticky;
+  top: -18px;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: start;
+  margin: -18px -18px 0;
+  padding: 18px 18px 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid #dce5ef;
+  background: #ffffff;
+}
+
+.modal-close-button {
+  flex: 0 0 auto;
+  border: 1px solid #c9d4e2;
+  background: #ffffff;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.modal-close-button:hover {
+  border-color: #9fb0c4;
 }
 
 .ticket-modal-head span,

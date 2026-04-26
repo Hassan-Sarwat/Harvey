@@ -655,6 +655,7 @@ function FootnotedAnswer({
 
 function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAddFiles?: (files: File[]) => void }) {
   const [step, setStep] = useState<"review" | "missing" | "ticket">("review");
+  const [isOpen, setIsOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [addedFiles, setAddedFiles] = useState<string[]>([]);
   const [ticketQuestion, setTicketQuestion] = useState("Please review the flagged playbook deviations and approve the proposed escalation path.");
@@ -663,256 +664,275 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
   const [ticketNotes, setTicketNotes] = useState("");
   const [ticketSent, setTicketSent] = useState(false);
   const check = result.business_input;
-  if (!check || check.status !== "needs_business_input") return null;
-
-  const missing = check.missing_items ?? [];
-  const escalationFindings = (result.findings ?? []).filter(isLegalEscalationFinding).slice(0, 3);
-  const sourceLabel = check.source === "openai" ? "LLM file check" : "File reference parser";
   const addMissingFiles = (incoming: File[]) => {
     if (!incoming.length) return;
     onAddFiles?.(incoming);
     setAddedFiles((current) => [...current, ...incoming.map((file) => file.name)]);
   };
 
-  return (
-    <section className="legal-flow-card" aria-label="Legal review and missing files">
-      <div className="legal-flow-steps">
-        <button className={step === "review" ? "active" : ""} type="button" onClick={() => setStep("review")}>
-          <span>1</span>
-          Legal review
-        </button>
-        <button className={step === "missing" ? "active" : ""} type="button" onClick={() => setStep("missing")}>
-          <span>2</span>
-          Missing files
-        </button>
-        <button className={step === "ticket" ? "active" : ""} type="button" onClick={() => setStep("ticket")}>
-          <span>3</span>
-          Ticket details
+  const closeWorkflow = () => {
+    setIsOpen(false);
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeWorkflow();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen]);
+
+  if (!check || check.status !== "needs_business_input") return null;
+
+  const missing = check.missing_items ?? [];
+  const escalationFindings = (result.findings ?? []).filter(isLegalEscalationFinding).slice(0, 3);
+  const sourceLabel = check.source === "openai" ? "LLM file check" : "File reference parser";
+
+  const uploadArea = (title: string, description: string, visibleCount: number) => (
+    <>
+      <label
+        className={isDragging ? "legal-flow-upload dragging" : "legal-flow-upload"}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+          addMissingFiles(Array.from(event.dataTransfer.files ?? []));
+        }}
+      >
+        <UploadCloud size={18} />
+        <span>
+          <strong>{title}</strong>
+          <small>{description}</small>
+        </span>
+        <input
+          type="file"
+          multiple
+          onChange={(event) => {
+            addMissingFiles(Array.from(event.target.files ?? []));
+            event.currentTarget.value = "";
+          }}
+        />
+      </label>
+
+      {addedFiles.length ? (
+        <div className="legal-flow-added">
+          {addedFiles.slice(-visibleCount).map((filename, index) => (
+            <span key={`${filename}-${index}`}>
+              <Paperclip size={13} />
+              {filename}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+
+  const stepContent =
+    step === "review" ? (
+      <div className="legal-flow-pane">
+        <div className="legal-flow-head">
+          <Gavel size={18} />
+          <div>
+            <strong>Recommended for Legal review</strong>
+            <span>Donna checked the contract against the BMW playbook first. The package is not ready to send yet because referenced files are missing.</span>
+          </div>
+        </div>
+
+        <div className="legal-flow-list">
+          {escalationFindings.length ? (
+            escalationFindings.map((finding) => (
+              <article className="legal-flow-item" key={finding.id}>
+                <div>
+                  <strong>{finding.title}</strong>
+                  <span className={finding.severity === "High" ? "severity-high" : ""}>{finding.category} · {finding.severity}</span>
+                </div>
+                <p>{finding.description}</p>
+                {finding.evidence?.[0]?.quote ? <blockquote>{finding.evidence[0].quote}</blockquote> : null}
+              </article>
+            ))
+          ) : (
+            <article className="legal-flow-item">
+              <div>
+                <strong>Playbook deviation detected</strong>
+                <span>Legal review recommended</span>
+              </div>
+              <p>{result.plain_answer}</p>
+            </article>
+          )}
+        </div>
+
+        <button className="legal-flow-next" type="button" onClick={() => setStep("missing")}>
+          Next: add missing {missing.length === 1 ? "file" : "files"}
+          <ChevronRight size={16} />
         </button>
       </div>
-
-      {step === "review" ? (
-        <div className="legal-flow-pane">
-          <div className="legal-flow-head">
-            <Gavel size={18} />
-            <div>
-              <strong>Recommended for Legal review</strong>
-              <span>Donna checked the contract against the BMW playbook first. The package is not ready to send yet because referenced files are missing.</span>
-            </div>
+    ) : step === "missing" ? (
+      <div className="legal-flow-pane">
+        <div className="legal-flow-head">
+          <Paperclip size={18} />
+          <div>
+            <strong>Add missing referenced {missing.length === 1 ? "file" : "files"}</strong>
+            <span>{sourceLabel} only checked explicit references in the uploaded file against the current attachments.</span>
           </div>
+        </div>
 
-          <div className="legal-flow-list">
-            {escalationFindings.length ? (
-              escalationFindings.map((finding) => (
-                <article className="legal-flow-item" key={finding.id}>
-                  <div>
-                    <strong>{finding.title}</strong>
-                    <span className={finding.severity === "High" ? "severity-high" : ""}>{finding.category} · {finding.severity}</span>
-                  </div>
-                  <p>{finding.description}</p>
-                  {finding.evidence?.[0]?.quote ? <blockquote>{finding.evidence[0].quote}</blockquote> : null}
-                </article>
-              ))
-            ) : (
-              <article className="legal-flow-item">
-                <div>
-                  <strong>Playbook deviation detected</strong>
-                  <span>Legal review recommended</span>
-                </div>
-                <p>{result.plain_answer}</p>
-              </article>
-            )}
-          </div>
+        <div className="legal-flow-list">
+          {missing.map((item, index) => (
+            <article className="legal-flow-item missing" key={`${item.label}-${index}`}>
+              <div>
+                <strong>{item.label}</strong>
+                <span>{item.source_file || "ticket intake"}</span>
+              </div>
+              <p>{item.reason}</p>
+              {item.source_quote ? (
+                <blockquote>
+                  <span>Why Donna expects it</span>
+                  {item.source_quote}
+                </blockquote>
+              ) : null}
+            </article>
+          ))}
+        </div>
 
-          <button className="legal-flow-next" type="button" onClick={() => setStep("missing")}>
-            Next: add missing {missing.length === 1 ? "file" : "files"}
+        <div className="legal-flow-actions">
+          <button className="legal-flow-back" type="button" onClick={() => setStep("review")}>
+            Back
+          </button>
+          <button className="legal-flow-next" type="button" onClick={() => setStep("ticket")}>
+            Next: ticket details
             <ChevronRight size={16} />
           </button>
+          <span>Upload the missing file{missing.length === 1 ? "" : "s"} and rerun before sending to Legal.</span>
         </div>
-      ) : step === "missing" ? (
-        <div className="legal-flow-pane">
-          <div className="legal-flow-head">
-            <Paperclip size={18} />
-            <div>
-              <strong>Add missing referenced {missing.length === 1 ? "file" : "files"}</strong>
-              <span>{sourceLabel} only checked explicit references in the uploaded file against the current attachments.</span>
-            </div>
-          </div>
 
-          <div className="legal-flow-list">
-            {missing.map((item, index) => (
-              <article className="legal-flow-item missing" key={`${item.label}-${index}`}>
-                <div>
-                  <strong>{item.label}</strong>
-                  <span>{item.source_file || "ticket intake"}</span>
-                </div>
-                <p>{item.reason}</p>
-                {item.source_quote ? (
-                  <blockquote>
-                    <span>Why Donna expects it</span>
-                    {item.source_quote}
-                  </blockquote>
-                ) : null}
-              </article>
-            ))}
+        {uploadArea("Add missing files", "Drop here or browse. Files are attached to the composer for the rerun.", 4)}
+      </div>
+    ) : (
+      <div className="legal-flow-pane">
+        <div className="legal-flow-head">
+          <Send size={18} />
+          <div>
+            <strong>Submit Legal ticket</strong>
+            <span>Add the missing files and business context, then send the prepared package to Legal.</span>
           </div>
+        </div>
 
-          <div className="legal-flow-actions">
-            <button className="legal-flow-back" type="button" onClick={() => setStep("review")}>
-              Back
-            </button>
-            <button className="legal-flow-next" type="button" onClick={() => setStep("ticket")}>
-              Next: ticket details
-              <ChevronRight size={16} />
-            </button>
-            <span>Upload the missing file{missing.length === 1 ? "" : "s"} and rerun before sending to Legal.</span>
-          </div>
+        {uploadArea("Attach missing files", "Drop files here or browse. They will be included in the Legal package draft.", 6)}
 
-          <label
-            className={isDragging ? "legal-flow-upload dragging" : "legal-flow-upload"}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-              setIsDragging(true);
-            }}
-            onDragLeave={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-              addMissingFiles(Array.from(event.dataTransfer.files ?? []));
+        <div className="ticket-form-grid">
+          <label className="ticket-field wide">
+            <span>Question for Legal</span>
+            <textarea value={ticketQuestion} onChange={(event) => setTicketQuestion(event.target.value)} rows={3} />
+          </label>
+          <label className="ticket-field">
+            <span>Business owner</span>
+            <input value={ticketOwner} onChange={(event) => setTicketOwner(event.target.value)} placeholder="Name or team" />
+          </label>
+          <label className="ticket-field">
+            <span>Urgency</span>
+            <select value={ticketUrgency} onChange={(event) => setTicketUrgency(event.target.value)}>
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+              <option value="signing_blocker">Signing blocker</option>
+            </select>
+          </label>
+          <label className="ticket-field wide">
+            <span>Relevant business context</span>
+            <textarea value={ticketNotes} onChange={(event) => setTicketNotes(event.target.value)} rows={4} placeholder="Commercial pressure, signing deadline, negotiation history, vendor position, or why a referenced file is unavailable." />
+          </label>
+        </div>
+
+        <div className="ticket-review-box">
+          <strong>Ticket package status</strong>
+          <span>{missing.length} referenced file{missing.length === 1 ? "" : "s"} still flagged by Donna.</span>
+          {addedFiles.length ? <span>{addedFiles.length} new file{addedFiles.length === 1 ? "" : "s"} added to the composer for rerun.</span> : null}
+          <small>After adding files, rerun Donna so the completeness gate can verify the package before the ticket is sent.</small>
+        </div>
+
+        <div className="legal-flow-actions">
+          <button className="legal-flow-back" type="button" onClick={() => setStep("missing")}>
+            Back
+          </button>
+          <button
+            className="legal-flow-next"
+            type="button"
+            onClick={() => {
+              setIsOpen(false);
+              setTicketSent(true);
             }}
           >
-            <UploadCloud size={18} />
-            <span>
-              <strong>Add missing files</strong>
-              <small>Drop here or browse. Files are attached to the composer for the rerun.</small>
-            </span>
-            <input
-              type="file"
-              multiple
-              onChange={(event) => {
-                addMissingFiles(Array.from(event.target.files ?? []));
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          {addedFiles.length ? (
-            <div className="legal-flow-added">
-              {addedFiles.slice(-4).map((filename, index) => (
-                <span key={`${filename}-${index}`}>
-                  <Paperclip size={13} />
-                  {filename}
-                </span>
-              ))}
-            </div>
-          ) : null}
+            Send ticket to Legal
+            <CheckCircle2 size={16} />
+          </button>
         </div>
-      ) : (
-        <div className="legal-flow-pane">
-          <div className="legal-flow-head">
-            <Send size={18} />
-            <div>
-              <strong>Submit Legal ticket</strong>
-              <span>Add the missing files and business context, then send the prepared package to Legal.</span>
-            </div>
-          </div>
+      </div>
+    );
 
-          <label
-            className={isDragging ? "legal-flow-upload dragging" : "legal-flow-upload"}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-              setIsDragging(true);
-            }}
-            onDragLeave={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-              addMissingFiles(Array.from(event.dataTransfer.files ?? []));
-            }}
-          >
-            <UploadCloud size={18} />
-            <span>
-              <strong>Attach missing files</strong>
-              <small>Drop files here or browse. They will be included in the Legal package draft.</small>
-            </span>
-            <input
-              type="file"
-              multiple
-              onChange={(event) => {
-                addMissingFiles(Array.from(event.target.files ?? []));
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          {addedFiles.length ? (
-            <div className="legal-flow-added">
-              {addedFiles.slice(-6).map((filename, index) => (
-                <span key={`${filename}-${index}`}>
-                  <Paperclip size={13} />
-                  {filename}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="ticket-form-grid">
-            <label className="ticket-field wide">
-              <span>Question for Legal</span>
-              <textarea value={ticketQuestion} onChange={(event) => setTicketQuestion(event.target.value)} rows={3} />
-            </label>
-            <label className="ticket-field">
-              <span>Business owner</span>
-              <input value={ticketOwner} onChange={(event) => setTicketOwner(event.target.value)} placeholder="Name or team" />
-            </label>
-            <label className="ticket-field">
-              <span>Urgency</span>
-              <select value={ticketUrgency} onChange={(event) => setTicketUrgency(event.target.value)}>
-                <option value="normal">Normal</option>
-                <option value="urgent">Urgent</option>
-                <option value="signing_blocker">Signing blocker</option>
-              </select>
-            </label>
-            <label className="ticket-field wide">
-              <span>Relevant business context</span>
-              <textarea value={ticketNotes} onChange={(event) => setTicketNotes(event.target.value)} rows={4} placeholder="Commercial pressure, signing deadline, negotiation history, vendor position, or why a referenced file is unavailable." />
-            </label>
-          </div>
-
-          <div className="ticket-review-box">
-            <strong>Ticket package status</strong>
-            <span>{missing.length} referenced file{missing.length === 1 ? "" : "s"} still flagged by Donna.</span>
-            {addedFiles.length ? <span>{addedFiles.length} new file{addedFiles.length === 1 ? "" : "s"} added to the composer for rerun.</span> : null}
-            <small>After adding files, rerun Donna so the completeness gate can verify the package before the ticket is sent.</small>
-          </div>
-
-          <div className="legal-flow-actions">
-            <button className="legal-flow-back" type="button" onClick={() => setStep("missing")}>
-              Back
-            </button>
-            <button className="legal-flow-next" type="button" onClick={() => setTicketSent(true)}>
-              Send ticket to Legal
-              <CheckCircle2 size={16} />
-            </button>
+  return (
+    <>
+      <section className="legal-flow-card legal-flow-launcher" aria-label="Legal review and missing files">
+        <div className="legal-flow-head">
+          <Gavel size={18} />
+          <div>
+            <strong>Recommended for Legal review</strong>
+            <span>{missing.length} referenced file{missing.length === 1 ? "" : "s"} must be added or explained before Legal gets the ticket.</span>
           </div>
         </div>
-      )}
+        <button className="legal-flow-next" type="button" onClick={() => setIsOpen(true)}>
+          Open escalation workflow
+          <ChevronRight size={16} />
+        </button>
+      </section>
+
+      {isOpen ? (
+        <div className="ticket-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) closeWorkflow();
+        }}>
+          <section className="ticket-modal legal-flow-modal" role="dialog" aria-modal="true" aria-label="Legal escalation workflow">
+            <div className="ticket-modal-head">
+              <div>
+                <span>Escalation workflow</span>
+                <strong>Prepare Legal review package</strong>
+              </div>
+              <button className="icon-button modal-close-button" type="button" onClick={closeWorkflow} aria-label="Close escalation workflow">
+                ×
+              </button>
+            </div>
+
+            <div className="legal-flow-steps">
+              <button className={step === "review" ? "active" : ""} type="button" onClick={() => setStep("review")}>
+                <span>1</span>
+                Legal review
+              </button>
+              <button className={step === "missing" ? "active" : ""} type="button" onClick={() => setStep("missing")}>
+                <span>2</span>
+                Missing files
+              </button>
+              <button className={step === "ticket" ? "active" : ""} type="button" onClick={() => setStep("ticket")}>
+                <span>3</span>
+                Ticket details
+              </button>
+            </div>
+
+            {stepContent}
+          </section>
+        </div>
+      ) : null}
+
       {ticketSent ? (
         <LegalTicketModal
           result={result}
@@ -926,7 +946,7 @@ function LegalReviewGatePanel({ result, onAddFiles }: { result: RunResult; onAdd
           onClose={() => setTicketSent(false)}
         />
       ) : null}
-    </section>
+    </>
   );
 }
 
@@ -951,15 +971,25 @@ function LegalTicketModal({
   ticketNotes: string;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
   return (
-    <div className="ticket-modal-backdrop" role="presentation">
+    <div className="ticket-modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
       <section className="ticket-modal" role="dialog" aria-modal="true" aria-label="Legal ticket package">
         <div className="ticket-modal-head">
           <div>
             <span>Legal ticket</span>
             <strong>Package sent to Legal</strong>
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close Legal ticket popup">
+          <button className="icon-button modal-close-button" type="button" onClick={onClose} aria-label="Close Legal ticket popup">
             ×
           </button>
         </div>
